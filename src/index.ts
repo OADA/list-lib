@@ -1,5 +1,5 @@
-import * as Bluebird from 'bluebird'
-import * as pointer from 'json-pointer'
+import Bluebird from 'bluebird'
+import pointer from 'json-pointer'
 import debug from 'debug'
 
 // TODO: Should this lib be specific to oada client??
@@ -14,6 +14,13 @@ const info = debug('oada-list-lib:info')
 const warn = debug('oada-list-lib:warn')
 const error = debug('oada-list-lib:error')
 
+// Accept anything with same method signatures as OADAClient
+type Conn = {
+  [P in keyof OADAClient]: OADAClient[P] extends Function
+    ? OADAClient[P]
+    : never
+}
+
 // Recursive version of Partial
 type DeepPartial<T> = {
   [P in keyof T]?: DeepPartial<T[P]>
@@ -24,7 +31,7 @@ type Options<Item> = {
    * Path to an OADA list to watch for items
    */
   path: string
-  conn: OADAClient
+  conn: Conn
 
   /**
    * Function to assert if an object is an Item.
@@ -52,7 +59,7 @@ type Options<Item> = {
 
 export class ListWatch<Item = unknown> {
   public path: string
-  private conn: OADAClient
+  private conn: Conn
   private id: string | null = null
   private assertItem: TypeAssert<Item>
 

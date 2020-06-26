@@ -7,12 +7,25 @@
   "license": "MIT",
   "scripts": {
     "build": "tsc",
+    "pretest": "npm run build",
+    "test": "ava",
     "prepare": "npm run build"
   },
+  "ava": {
+    "typescript": {
+      "rewritePaths": {
+        "src/": "lib/"
+      }
+    }
+  },
   "devDependencies": {
+    "@ava/typescript": "^1.1.1",
     "@types/json-pointer": "^1.0.30",
     "@types/node": "^14.0.14",
+    "@types/sinon": "^9.0.4",
+    "ava": "^3.9.0",
     "prettier-standard": "^16.3.0",
+    "sinon": "^9.0.2",
     "typescript": "^3.9.5"
   },
   "dependencies": {
@@ -22,6 +35,7 @@
     "@types/debug": "^4.1.5",
     "bluebird": "^3.7.2",
     "debug": "^4.1.1",
-    "json-pointer": "^0.6.0"
+    "json-pointer": "^0.6.0",
+    "jsonschema8": "^1.1.0"
   }
 }
