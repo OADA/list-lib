@@ -12,6 +12,7 @@ import { Change } from '@oada/types/oada/change/v2'
 
 const info = debug('oada-list-lib:info')
 const warn = debug('oada-list-lib:warn')
+const trace = debug('oada-list-lib:trace')
 const error = debug('oada-list-lib:error')
 
 // Accept anything with same method signatures as OADAClient
@@ -31,6 +32,9 @@ type Options<Item> = {
    * Path to an OADA list to watch for items
    */
   path: string
+  /**
+   * An OADAClient instance (or something with the same API)
+   */
   conn: Conn
 
   /**
@@ -76,6 +80,8 @@ export class ListWatch<Item = unknown> {
      */
     assertItem = () => {},
     onAddItem,
+    onChangeItem,
+    onItem,
     onRemoveItem
   }: Options<Item>) {
     this.path = path
@@ -83,6 +89,8 @@ export class ListWatch<Item = unknown> {
     this.assertItem = assertItem
 
     this.onAddItem = onAddItem
+    this.onChangeItem = onChangeItem
+    this.onItem = onItem
     this.onRemoveItem = onRemoveItem
 
     this.initialize()
@@ -108,6 +116,8 @@ export class ListWatch<Item = unknown> {
       watchCallback: async ({ type, path: changePath, body, ...ctx }) => {
         const rev = (body as Change['body'])._rev
         const [id, ...rest] = pointer.parse(changePath)
+
+        trace(`Received change to ${path}, rev ${rev}`)
 
         // The actual change was to an item in the list (or a descendant)
         if (id) {
@@ -146,7 +156,7 @@ export class ListWatch<Item = unknown> {
 
         switch (type) {
           case 'merge':
-            Bluebird.map(items, async id => {
+            await Bluebird.map(items, async id => {
               try {
                 const lchange = list[id] as Partial<Link>
 
@@ -176,7 +186,7 @@ export class ListWatch<Item = unknown> {
             break
 
           case 'delete':
-            Bluebird.map(items, async id => {
+            await Bluebird.map(items, async id => {
               try {
                 const lchange = list[id]
 
