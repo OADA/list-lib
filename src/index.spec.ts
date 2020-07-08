@@ -7,11 +7,13 @@ import { OADAClient, WatchRequest } from '@oada/client'
 
 import { ListWatch } from './'
 
+const name = 'oada-list-lib-test'
+
 test('it should WATCH given path', async t => {
   const conn = sinon.createStubInstance(OADAClient, {})
   const path = '/bookmarks/foo/bar'
 
-  new ListWatch({ path, conn })
+  new ListWatch({ path, name, conn })
   t.plan(1)
 
   // TODO: How to do this right in ava?
@@ -26,7 +28,7 @@ test('it should UNWATCH on stop()', async t => {
 
   conn.watch.resolves(id)
 
-  const watch = new ListWatch({ path, conn })
+  const watch = new ListWatch({ path, name, conn })
 
   // TODO: How to do this right in ava?
   await Bluebird.delay(5)
@@ -67,6 +69,7 @@ test('it should detect new item', async t => {
 
   const opts = {
     path,
+    name,
     conn,
     // Create spies to see which callbacks run
     onAddItem: sinon.spy(),
@@ -113,6 +116,7 @@ test('it should detect removed item', async t => {
 
   const opts = {
     path,
+    name,
     conn,
     // Create spies to see which callbacks run
     onAddItem: sinon.spy(),
@@ -136,3 +140,33 @@ test('it should detect removed item', async t => {
   t.is(opts.onRemoveItem.callCount, 1)
 })
 test.todo('it should detect modified item')
+
+test('should resume from last rev', async t => {
+  const conn = sinon.createStubInstance(OADAClient, {})
+  // A Change from adding an item to a list
+  // TODO: Better way to do this test without actually runnig oada?
+  const path = '/bookmarks'
+  const rev = '766'
+
+  // @ts-ignore
+  conn.get.resolves({ data: { rev } })
+
+  const opts = {
+    path,
+    name,
+    conn,
+    // Create spies to see which callbacks run
+    onAddItem: sinon.spy(),
+    onChangeItem: sinon.spy(),
+    onItem: sinon.spy(),
+    onRemoveItem: sinon.spy()
+  }
+
+  new ListWatch(opts)
+  // TODO: How to do this right in ava?
+  await Bluebird.delay(5)
+
+  t.is(conn.watch.firstCall.args[0].rev, rev)
+})
+test.todo('should persist rev to _meta')
+
