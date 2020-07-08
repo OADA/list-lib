@@ -11,13 +11,15 @@ import { List, Link } from '@oada/types/oada/link/v1'
 import { Change } from '@oada/types/oada/change/v2'
 import { SocketResponse } from '@oada/client/dist/websocket'
 
+import { Metadata } from './Metadata'
+
 const info = debug('oada-list-lib:info')
 const warn = debug('oada-list-lib:warn')
 const trace = debug('oada-list-lib:trace')
 const error = debug('oada-list-lib:error')
 
 // Accept anything with same method signatures as OADAClient
-type Conn = {
+export type Conn = {
   [P in keyof OADAClient]: OADAClient[P] extends Function
     ? OADAClient[P]
     : never
@@ -73,79 +75,6 @@ type Options<Item> = {
    * Called when an item is removed from the list
    */
   onRemoveItem?: (id: string) => Promise<void>
-}
-
-/**
- * Persistent data we store in the _meta of the list
- */
-class Metadata {
-  /**
-   * The rev we left off on
-   */
-  private _rev
-
-  private interval
-  /**
-   * Flag to track whenever any state gets set
-   */
-  private _updated: boolean
-
-  // Where to store state
-  private conn
-  private path
-
-  get rev (): string {
-    return this._rev
-  }
-  set rev (rev: string) {
-    this._rev = rev
-    this._updated = true
-  }
-
-  constructor ({
-    conn,
-    path,
-    rev,
-    persistInterval
-  }: {
-    path: string
-    conn: Conn
-    rev: string
-    persistInterval: number
-  }) {
-    this._rev = rev
-    this._updated = false
-
-    this.conn = conn
-    this.path = path
-
-    // Periodically persist state to _meta
-    this.interval = setInterval(() => this.persist(), persistInterval)
-  }
-
-  /**
-   * Persist relevant info to the _meta of the list.
-   * This preserves it across restarts.
-   */
-  public async persist () {
-    if (!this._updated) {
-      // Avoid PUTing to _meta needlessly
-      return
-    }
-
-    await this.conn.put({
-      path: this.path,
-      data: {
-        rev: this._rev
-      }
-    })
-
-    this._updated = false
-  }
-
-  public stop () {
-    clearInterval(this.interval)
-  }
 }
 
 export class ListWatch<Item = unknown> {
