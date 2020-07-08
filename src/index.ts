@@ -65,12 +65,13 @@ export class ListWatch<Item = unknown> {
   public path: string
   private conn: Conn
   private id: string | null = null
+  // TODO: This explicit typing thing must be a TS bug?
   private assertItem: TypeAssert<Item>
 
-  private onAddItem?: Options<Item>['onAddItem']
-  private onChangeItem?: Options<Item>['onChangeItem']
-  private onItem?: Options<Item>['onItem']
-  private onRemoveItem?: Options<Item>['onRemoveItem']
+  private onAddItem?
+  private onChangeItem?
+  private onItem?
+  private onRemoveItem?
 
   constructor ({
     path,
@@ -215,3 +216,4 @@ export class ListWatch<Item = unknown> {
     })
   }
 }
+
