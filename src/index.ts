@@ -181,6 +181,7 @@ export class ListWatch<Item = unknown> {
         const [id, ...rest] = pointer.parse(changePath)
 
         trace(`Received change to ${path}, rev ${rev}`)
+        let itemsFound = !!id
 
         try {
           // The actual change was to an item in the list (or a descendant)
@@ -217,6 +218,7 @@ export class ListWatch<Item = unknown> {
           const list = body as DeepPartial<List>
           // Ignore _ keys of OADA
           const items = Object.keys(list).filter(k => !k.match(/^_/))
+          itemsFound ||= items.length > 0
 
           switch (type) {
             case 'merge':
@@ -284,10 +286,19 @@ export class ListWatch<Item = unknown> {
             err
           )
         } finally {
-          this.meta!.rev = rev
+          // Need this check to prevent infinite loop
+          if (itemsFound) {
+            // Only update last processed rev if we actually processed items
+            this.meta!.rev = rev
+          }
         }
       }
     })
   }
 }
+
+
+
+
+
 
