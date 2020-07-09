@@ -177,6 +177,14 @@ export class ListWatch<Item = unknown> {
       path,
       rev: this.meta.rev,
       watchCallback: async ({ type, path: changePath, body, ...ctx }) => {
+        if (body === null && type === 'delete' && changePath === '') {
+          // The list itself was deleted
+          warn(`Detected delete of list ${path}`)
+
+          // TODO: Actually handle the list being deleted (redo watch?)
+          return
+        }
+
         const rev = (body as Change['body'])._rev as string
         const [id, ...rest] = pointer.parse(changePath)
 
@@ -296,6 +304,19 @@ export class ListWatch<Item = unknown> {
     })
   }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
