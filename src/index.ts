@@ -156,14 +156,16 @@ export class ListWatch<Item = unknown> {
         persistInterval,
         rev: rev!,
         conn,
-        path: `${path}/_meta/oada-list-lib/${name}`
+        path,
+        name
       })
     } catch (err) {
       this.meta = new Metadata({
         persistInterval,
         rev: '',
         conn,
-        path: `${path}/_meta/oada-list-lib/${name}`
+        path,
+        name
       })
       // Create the list?
       this.meta.rev = '0'
@@ -304,6 +306,8 @@ export class ListWatch<Item = unknown> {
     })
   }
 }
+
+
 
 
 

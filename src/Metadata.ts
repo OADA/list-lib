@@ -18,6 +18,7 @@ export class Metadata {
   // Where to store state
   private conn
   private path
+  private name
 
   get rev (): string {
     return this._rev
@@ -30,10 +31,12 @@ export class Metadata {
   constructor ({
     conn,
     path,
+    name,
     rev,
     persistInterval
   }: {
     path: string
+    name: string
     conn: Conn
     rev: string
     persistInterval: number
@@ -43,6 +46,7 @@ export class Metadata {
 
     this.conn = conn
     this.path = path
+    this.name = name
 
     // Periodically persist state to _meta
     this.interval = setInterval(() => this.persist(), persistInterval)
@@ -58,10 +62,15 @@ export class Metadata {
       return
     }
 
+    const meta = { rev: this._rev }
     await this.conn.put({
       path: this.path,
       data: {
-        rev: this._rev
+        _meta: {
+          'oada-list-lib': {
+            [this.name]: meta
+          }
+        }
       }
     })
 
