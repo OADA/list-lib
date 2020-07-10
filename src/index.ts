@@ -30,6 +30,15 @@ type DeepPartial<T> = {
   [P in keyof T]?: DeepPartial<T[P]>
 }
 
+type ServiceType =
+  /**
+   * Only process "new" list item at restart (e.g. syncer)
+   */
+  | 'resume'
+  /**
+   * Process all items in list every time (e.g. ainz)
+   */
+  | 'reprocess'
 type Options<Item> = {
   /**
    * Path to an OADA list to watch for items
@@ -41,6 +50,10 @@ type Options<Item> = {
    * It is used to prevent collisions in storage library metadata.
    */
   name: string
+  /**
+   * @default 'resume'
+   */
+  type?: ServiceType
   /**
    * An OADAClient instance (or something with the same API)
    */
@@ -84,6 +97,7 @@ type Options<Item> = {
 export class ListWatch<Item = unknown> {
   public path
   public name
+  public type
   private conn
   private id?: string
   // TODO: This explicit typing thing must be a TS bug?
@@ -102,6 +116,7 @@ export class ListWatch<Item = unknown> {
   constructor ({
     path,
     name,
+    type = 'resume',
     conn,
     persistInterval = 1000,
     /**
@@ -120,6 +135,7 @@ export class ListWatch<Item = unknown> {
   }: Options<Item>) {
     this.path = path
     this.name = name
+    this.type = type
     this.conn = conn as Conn & {
       // Make get less annoying
       get<T = unknown>(
@@ -308,7 +324,7 @@ export class ListWatch<Item = unknown> {
           )
         } finally {
           // Need this check to prevent infinite loop
-          if (itemsFound) {
+          if (itemsFound && this.type === 'resume') {
             // Only update last processed rev if we actually processed items
             this.meta!.rev = rev
           }
