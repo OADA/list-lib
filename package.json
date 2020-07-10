@@ -11,6 +11,13 @@
     "test": "ava",
     "prepare": "npm run build"
   },
+  "files": [
+    "**/*.ts",
+    "**/*.ts.map",
+    "**/*.js",
+    "**/*.js.map",
+    "tsconfig.json"
+  ],
   "ava": {
     "typescript": {
       "rewritePaths": {
