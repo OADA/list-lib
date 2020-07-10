@@ -75,6 +75,10 @@ type Options<Item> = {
    * Called when an item is removed from the list
    */
   onRemoveItem?: (id: string) => Promise<void>
+  /**
+   * Called when the list itself is deleted
+   */
+  onDeleteList?: () => Promise<void>
 }
 
 export class ListWatch<Item = unknown> {
@@ -88,11 +92,12 @@ export class ListWatch<Item = unknown> {
   // _meta stuff
   private meta?: Metadata
 
-  // Callback
+  // Callbacks
   private onAddItem?
   private onChangeItem?
   private onItem?
   private onRemoveItem?
+  private onDeleteList
 
   constructor ({
     path,
@@ -106,7 +111,12 @@ export class ListWatch<Item = unknown> {
     onAddItem,
     onChangeItem,
     onItem,
-    onRemoveItem
+    onRemoveItem,
+    onDeleteList = async () => {
+      // TODO: Actually handle the list being deleted (redo watch?)
+      error(`Unhandled delete of list ${path}`)
+      process.exit()
+    }
   }: Options<Item>) {
     this.path = path
     this.name = name
@@ -122,6 +132,7 @@ export class ListWatch<Item = unknown> {
     this.onChangeItem = onChangeItem
     this.onItem = onItem
     this.onRemoveItem = onRemoveItem
+    this.onDeleteList = onDeleteList
 
     this.initialize(persistInterval)
   }
@@ -183,7 +194,7 @@ export class ListWatch<Item = unknown> {
           // The list itself was deleted
           warn(`Detected delete of list ${path}`)
 
-          // TODO: Actually handle the list being deleted (redo watch?)
+          await this.onDeleteList()
           return
         }
 

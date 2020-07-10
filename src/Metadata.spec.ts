@@ -85,6 +85,9 @@ test('should persist rev to _meta', async t => {
 
   await Bluebird.delay(100)
 
-  t.is((conn.put.firstCall.args[0].data as { rev: string }).rev, '4')
+  t.is(
+    // @ts-ignore
+    conn.put.firstCall.args[0].data?._meta?.['oada-list-lib']?.[name]?.rev,
+    '4'
+  )
 })
-
