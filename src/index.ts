@@ -30,15 +30,6 @@ type DeepPartial<T> = {
   [P in keyof T]?: DeepPartial<T[P]>
 }
 
-type ServiceType =
-  /**
-   * Only process "new" list item at restart (e.g. syncer)
-   */
-  | 'resume'
-  /**
-   * Process all items in list every time (e.g. ainz)
-   */
-  | 'reprocess'
 type Options<Item> = {
   /**
    * Path to an OADA list to watch for items
@@ -51,9 +42,13 @@ type Options<Item> = {
    */
   name: string
   /**
-   * @default 'resume'
+   * true: "resume" change feed for list from last processed rev
+   * false: just start from current state of the list
+   *
+   * @todo should default be true instead??
+   * @default false
    */
-  type?: ServiceType
+  resume?: boolean
   /**
    * An OADAClient instance (or something with the same API)
    */
@@ -97,7 +92,7 @@ type Options<Item> = {
 export class ListWatch<Item = unknown> {
   public path
   public name
-  public type
+  private resume
   private conn
   private id?: string
   // TODO: This explicit typing thing must be a TS bug?
@@ -116,7 +111,7 @@ export class ListWatch<Item = unknown> {
   constructor ({
     path,
     name,
-    type = 'resume',
+    resume = false,
     conn,
     persistInterval = 1000,
     /**
@@ -135,7 +130,7 @@ export class ListWatch<Item = unknown> {
   }: Options<Item>) {
     this.path = path
     this.name = name
-    this.type = type
+    this.resume = resume
     this.conn = conn as Conn & {
       // Make get less annoying
       get<T = unknown>(
@@ -171,6 +166,8 @@ export class ListWatch<Item = unknown> {
     const { path, name, conn } = this
 
     info(`Ensuring ${path} exists`)
+    // TODO: If we have not run on this before,
+    // should we feed all current items through the newItem callback?
     try {
       // Try to get our metadata about this list
       const {
@@ -195,16 +192,14 @@ export class ListWatch<Item = unknown> {
         name
       })
       // Create the list?
-      this.meta.rev = '0'
+      this.meta.rev = this.resume ? '0' : 'x'
       await this.meta.persist()
     }
 
     // Setup watch on the path
-    // TODO: Handle reestabnlishing watch and updating meta
-    // when path is deleted etc.
     this.id = await conn.watch({
       path,
-      rev: this.meta.rev,
+      rev: this.resume ? this.meta.rev : undefined,
       watchCallback: async ({ type, path: changePath, body, ...ctx }) => {
         if (body === null && type === 'delete' && changePath === '') {
           // The list itself was deleted
@@ -324,7 +319,7 @@ export class ListWatch<Item = unknown> {
           )
         } finally {
           // Need this check to prevent infinite loop
-          if (itemsFound && this.type === 'resume') {
+          if (itemsFound && this.resume) {
             // Only update last processed rev if we actually processed items
             this.meta!.rev = rev
           }
