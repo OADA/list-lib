@@ -25,6 +25,11 @@ export type Conn = {
     : never
 }
 
+export type ConnI = Conn & {
+  // Make get less annoying
+  get<T = unknown>(request: GETRequest): Promise<SocketResponse & { data: T }>
+}
+
 // Recursive version of Partial
 type DeepPartial<T> = {
   [P in keyof T]?: DeepPartial<T[P]>
@@ -99,7 +104,7 @@ export class ListWatch<Item = unknown> {
   private assertItem: TypeAssert<Item>
 
   // _meta stuff
-  private meta?: Metadata
+  private meta
 
   // Callbacks
   private onAddItem?
@@ -131,12 +136,7 @@ export class ListWatch<Item = unknown> {
     this.path = path
     this.name = name
     this.resume = resume
-    this.conn = conn as Conn & {
-      // Make get less annoying
-      get<T = unknown>(
-        request: GETRequest
-      ): Promise<SocketResponse & { data: T }>
-    }
+    this.conn = conn as ConnI
     this.assertItem = assertItem
 
     this.onAddItem = onAddItem
@@ -145,7 +145,13 @@ export class ListWatch<Item = unknown> {
     this.onRemoveItem = onRemoveItem
     this.onDeleteList = onDeleteList
 
-    this.initialize(persistInterval)
+    this.meta = new Metadata({
+      persistInterval,
+      conn: this.conn,
+      path,
+      name
+    })
+    this.initialize().catch(error)
   }
 
   public async stop () {
@@ -228,47 +234,26 @@ export class ListWatch<Item = unknown> {
     return items.length > 0
   }
 
-  private async initialize (persistInterval: number) {
-    const { path, name, conn } = this
+  private async initialize () {
+    const { path, conn } = this
+
+    // TODO: Support a tree?
+    info(`Ensuring ${path} exists`)
+    try {
+      await conn.head({ path })
+    } catch (err) {
+      if (err.status === 403 || err.status === 404) {
+        // Create it
+        await conn.put({ path, data: {} })
+        trace(`Created ${path} because it did not exist`)
+      } else {
+        error(err)
+        throw err
+      }
+    }
 
     // TODO: Clean up control flow to not need this?
-    let currentItemsNew = this.resume
-
-    info(`Ensuring ${path} exists`)
-    // TODO: If we have not run on this before,
-    // should we feed all current items through the newItem callback?
-    try {
-      // Try to get our metadata about this list
-      const {
-        data: { rev }
-      } = await conn.get<Partial<Metadata>>({
-        // TODO: Where in _meta to keep stuff?
-        path: `${path}/_meta/oada-list-lib/${name}`
-      })
-      this.meta = new Metadata({
-        persistInterval,
-        rev: rev!,
-        conn,
-        path,
-        name
-      })
-    } catch (err) {
-      // If we have no metadata here,
-      // then consider everything "new"
-      currentItemsNew = true
-
-      // Create the list?
-      // Create our metadata
-      this.meta = new Metadata({
-        persistInterval,
-        rev: '',
-        conn,
-        path,
-        name
-      })
-      this.meta.rev = this.resume ? '0' : 'x'
-      await this.meta.persist()
-    }
+    const currentItemsNew = !(await this.meta.init()) || !this.resume
 
     let rev = this.meta.rev
     if (currentItemsNew) {
