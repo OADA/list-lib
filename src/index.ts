@@ -162,8 +162,77 @@ export class ListWatch<Item = unknown> {
     await this.meta?.persist()
   }
 
+  private async handleListChange (
+    list: DeepPartial<List>,
+    type: Change['type']
+  ): Promise<boolean> {
+    const { path, conn } = this
+    const rev = list._rev
+    // Ignore _ keys of OADA
+    const items = Object.keys(list).filter(k => !k.match(/^_/))
+
+    switch (type) {
+      case 'merge':
+        await Bluebird.map(items, async id => {
+          try {
+            const lchange = list[id] as Partial<Link>
+
+            // If there is an _id this is a new link in the list right?
+            if (lchange._id) {
+              info(`Detected new item ${id} in ${path}, rev ${rev}`)
+              const { data: item } = await conn.get({
+                path: `${path}/${id}`
+              })
+              this.assertItem(item)
+              await this.onAddItem?.(item, id)
+              await this.onItem?.(item, id)
+            } else {
+              // TODO: What should we do now??
+              warn(`Ignoring non-link key added to list ${path}, rev ${rev}`)
+            }
+          } catch (err) {
+            // TODO: Keep track of failed items in meta or something
+            // Log error with this item but continue map over other items
+            error(
+              `Error processing change for ${id} at ${path}, rev ${rev}: %O`,
+              err
+            )
+          }
+        })
+        break
+
+      case 'delete':
+        await Bluebird.map(items, async id => {
+          try {
+            const lchange = list[id]
+
+            if (lchange === null) {
+              info(`Detected removal of item ${id} from ${path}, rev ${rev}`)
+              this.onRemoveItem?.(id)
+            } else {
+              // TODO: What does this mean??
+              warn(`Ignoring non-link key added to list ${path}, rev ${rev}`)
+            }
+          } catch (err) {
+            // TODO: Keep track of failed items in meta or something
+            // Log error with this item but continue map over other items
+            error(
+              `Error processing change for ${id} at ${path}, rev ${rev}: %O`,
+              err
+            )
+          }
+        })
+        break
+    }
+
+    return items.length > 0
+  }
+
   private async initialize (persistInterval: number) {
     const { path, name, conn } = this
+
+    // TODO: Clean up control flow to not need this?
+    let currentItemsNew = this.resume
 
     info(`Ensuring ${path} exists`)
     // TODO: If we have not run on this before,
@@ -184,6 +253,12 @@ export class ListWatch<Item = unknown> {
         name
       })
     } catch (err) {
+      // If we have no metadata here,
+      // then consider everything "new"
+      currentItemsNew = true
+
+      // Create the list?
+      // Create our metadata
       this.meta = new Metadata({
         persistInterval,
         rev: '',
@@ -191,15 +266,23 @@ export class ListWatch<Item = unknown> {
         path,
         name
       })
-      // Create the list?
       this.meta.rev = this.resume ? '0' : 'x'
       await this.meta.persist()
+    }
+
+    let rev = this.meta.rev
+    if (currentItemsNew) {
+      const { data: list } = await conn.get<List>({ path })
+
+      // Feed in current state as fake merge change
+      rev = list._rev + ''
+      await this.handleListChange(list as DeepPartial<List>, 'merge')
     }
 
     // Setup watch on the path
     this.id = await conn.watch({
       path,
-      rev: this.resume ? this.meta.rev : undefined,
+      rev: this.resume ? this.meta.rev : rev,
       watchCallback: async ({ type, path: changePath, body, ...ctx }) => {
         if (body === null && type === 'delete' && changePath === '') {
           // The list itself was deleted
@@ -248,69 +331,7 @@ export class ListWatch<Item = unknown> {
 
           // The change was to the list itself
           const list = body as DeepPartial<List>
-          // Ignore _ keys of OADA
-          const items = Object.keys(list).filter(k => !k.match(/^_/))
-          itemsFound ||= items.length > 0
-
-          switch (type) {
-            case 'merge':
-              await Bluebird.map(items, async id => {
-                try {
-                  const lchange = list[id] as Partial<Link>
-
-                  // If there is an _id this is a new link in the list right?
-                  if (lchange._id) {
-                    info(`Detected new item ${id} in ${path}, rev ${rev}`)
-                    const { data: item } = await conn.get({
-                      path: `${path}/${id}`
-                    })
-                    this.assertItem(item)
-                    await this.onAddItem?.(item, id)
-                    await this.onItem?.(item, id)
-                  } else {
-                    // TODO: What should we do now??
-                    warn(
-                      `Ignoring non-link key added to list ${path}, rev ${rev}`
-                    )
-                  }
-                } catch (err) {
-                  // TODO: Keep track of failed items in meta or something
-                  // Log error with this item but continue map over other items
-                  error(
-                    `Error processing change for ${id} at ${path}, rev ${rev}: %O`,
-                    err
-                  )
-                }
-              })
-              break
-
-            case 'delete':
-              await Bluebird.map(items, async id => {
-                try {
-                  const lchange = list[id]
-
-                  if (lchange === null) {
-                    info(
-                      `Detected removal of item ${id} from ${path}, rev ${rev}`
-                    )
-                    this.onRemoveItem?.(id)
-                  } else {
-                    // TODO: What does this mean??
-                    warn(
-                      `Ignoring non-link key added to list ${path}, rev ${rev}`
-                    )
-                  }
-                } catch (err) {
-                  // TODO: Keep track of failed items in meta or something
-                  // Log error with this item but continue map over other items
-                  error(
-                    `Error processing change for ${id} at ${path}, rev ${rev}: %O`,
-                    err
-                  )
-                }
-              })
-              break
-          }
+          itemsFound = (await this.handleListChange(list, type)) || itemsFound
         } catch (err) {
           // TODO: Keep track of failed items in meta or something
           error(
@@ -328,24 +349,3 @@ export class ListWatch<Item = unknown> {
     })
   }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
