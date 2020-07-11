@@ -165,7 +165,7 @@ export class ListWatch<Item = unknown> {
    * This preserves it across restarts.
    */
   public async persistMeta () {
-    await this.meta?.persist()
+    await this.meta.persist()
   }
 
   private async handleListChange (
@@ -185,6 +185,13 @@ export class ListWatch<Item = unknown> {
 
             // If there is an _id this is a new link in the list right?
             if (lchange._id) {
+              // Double check that this item is new
+              // (for the edge-case that our rev was too far behind current rev)
+              if (+(lchange._rev as string) <= +this.meta.rev) {
+                warn(`Igoring old item ${id} in ${path}`)
+                return
+              }
+
               info(`Detected new item ${id} in ${path}, rev ${rev}`)
               const { data: item } = await conn.get({
                 path: `${path}/${id}`
