@@ -4,7 +4,7 @@ import debug from 'debug'
 
 // TODO: Should this lib be specific to oada client??
 // prettier-ignore
-import { OADAClient, GETRequest } from '@oada/client'
+import type { OADAClient, GETRequest } from '@oada/client'
 
 import { TypeAssert } from '@oada/types'
 import { Resource } from '@oada/types/oada/resource'
@@ -21,9 +21,13 @@ const error = debug('oada-list-lib:error')
 
 // Accept anything with same method signatures as OADAClient
 export type Conn = {
-  [P in keyof OADAClient]: OADAClient[P] extends Function
-    ? OADAClient[P]
-    : never
+  get: OADAClient['get']
+  head: OADAClient['head']
+  put: OADAClient['put']
+  post: OADAClient['post']
+  delete: OADAClient['delete']
+  watch: OADAClient['watch']
+  unwatch: OADAClient['unwatch']
 }
 
 export type ConnI = Conn & {
@@ -204,13 +208,14 @@ export class ListWatch<Item = unknown> {
               } finally {
                 // Call this even if previous callback errored
 
+                // TODO: Do I need to make a fake "change" to the item
+                // or will the feed have one??
+
                 // Double check this item is actually newer than last time
                 if (+_rev > +(this.meta.handled[id]?.onItem?.rev ?? 0)) {
                   await this.onItem?.(item, id)
                   this.meta.handled = { [id]: { onItem: { rev: _rev + '' } } }
                 }
-                // TODO: Do I need to make a fake "change" to the item
-                // or will the feed have one??
               }
             } else {
               // TODO: What should we do now??
