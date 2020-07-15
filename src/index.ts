@@ -147,7 +147,8 @@ export class ListWatch<Item = unknown> {
     this.onDeleteList = onDeleteList
 
     this.meta = new Metadata({
-      persistInterval,
+      // Don't persist metdata if service does not "resume"
+      persistInterval: this.resume ? persistInterval : 0,
       conn: this.conn,
       path,
       name

@@ -39,7 +39,7 @@ export class Metadata {
    */
   private _handled: Items = {}
 
-  private interval
+  private interval?
   /**
    * Flag to track whenever any state gets set
    */
@@ -94,7 +94,9 @@ export class Metadata {
     this.path = `${path}/_meta/${Metadata.META_KEY}/${name}`
 
     // Periodically persist state to _meta
-    this.interval = setInterval(() => this.persist(), persistInterval)
+    if (persistInterval) {
+      this.interval = setInterval(() => this.persist(), persistInterval)
+    }
   }
 
   // TODO: I hate needing to call init...
@@ -123,7 +125,7 @@ export class Metadata {
    * This preserves it across restarts.
    */
   public async persist () {
-    if (!this._updated) {
+    if (!this._updated || !this.interval) {
       // Avoid PUTing to _meta needlessly
       return
     }
@@ -147,6 +149,6 @@ export class Metadata {
   }
 
   public stop () {
-    clearInterval(this.interval)
+    this.interval && clearInterval(this.interval)
   }
 }
