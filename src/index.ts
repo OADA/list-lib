@@ -187,13 +187,6 @@ export class ListWatch<Item = unknown> {
 
             // If there is an _id this is a new link in the list right?
             if (lchange._id) {
-              // Double check that this item is new
-              // (for the edge-case that our rev was too far behind current rev)
-              if (+(lchange._rev as string) <= +this.meta.rev) {
-                warn(`Igoring old item ${id} in ${path}`)
-                return
-              }
-
               info(`Detected new item ${id} in ${path}, rev ${rev}`)
               const { data: item } = await conn.get<Resource>({
                 path: `${path}/${id}`
@@ -201,12 +194,23 @@ export class ListWatch<Item = unknown> {
               const { _rev } = item
               this.assertItem(item)
               try {
-                await this.onAddItem?.(item, id)
-                this.meta.handled = { [id]: { onAddItem: { rev: _rev + '' } } }
+                // Double check this is a new item?
+                if (!this.meta.handled[id]?.onAddItem) {
+                  await this.onAddItem?.(item, id)
+                  this.meta.handled = {
+                    [id]: { onAddItem: { rev: _rev + '' } }
+                  }
+                }
               } finally {
                 // Call this even if previous callback errored
-                await this.onItem?.(item, id)
-                this.meta.handled = { [id]: { onItem: { rev: _rev + '' } } }
+
+                // Double check this item is actually newer than last time
+                if (+_rev > +(this.meta.handled[id]?.onItem?.rev ?? 0)) {
+                  await this.onItem?.(item, id)
+                  this.meta.handled = { [id]: { onItem: { rev: _rev + '' } } }
+                }
+                // TODO: Do I need to make a fake "change" to the item
+                // or will the feed have one??
               }
             } else {
               // TODO: What should we do now??
