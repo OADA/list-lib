@@ -1,4 +1,25 @@
+import assign from 'object-assign-deep'
+
 import { ConnI } from '.'
+
+/**
+ * Record of successfully handled list item(s)
+ */
+export type Items = {
+  /**
+   * The list item which ran
+   */
+  [item: string]:
+    | undefined
+    | {
+        /**
+         * The callback which ran on item
+         */
+        [callback: string]: {
+          rev: string
+        }
+      }
+}
 
 /**
  * Persistent data we store in the _meta of the list
@@ -13,6 +34,10 @@ export class Metadata {
    * The rev we left off on
    */
   private _rev = '0'
+  /**
+   * Track "error" items
+   */
+  private _handled: Items = {}
 
   private interval
   /**
@@ -27,14 +52,25 @@ export class Metadata {
   get rev (): string {
     return this._rev
   }
-  set rev (rev: string) {
+  set rev (rev) {
     this._rev = rev
     this._updated = true
   }
 
+  // TODO: IDK about this...
+  set handled (items) {
+    assign(this._handled, items)
+    this._updated = true
+  }
+
+  get handled () {
+    return this._handled
+  }
+
   toJSON (): object {
     return {
-      rev: this.rev
+      rev: this.rev,
+      handled: this.handled
     }
   }
 
@@ -92,6 +128,16 @@ export class Metadata {
       return
     }
 
+    // Removing keys in OADA is annoying
+    // TODO: Is it better to just DELETE the whole thing and then put?
+    for (const id in this.handled) {
+      if (!this.handled[id]) {
+        await this.conn.delete({
+          path: `${this.path}/${id}`
+        })
+        delete this.handled[id]
+      }
+    }
     await this.conn.put({
       path: this.path,
       data: this as {}

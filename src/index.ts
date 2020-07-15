@@ -7,6 +7,7 @@ import debug from 'debug'
 import { OADAClient, GETRequest } from '@oada/client'
 
 import { TypeAssert } from '@oada/types'
+import { Resource } from '@oada/types/oada/resource'
 import { List, Link } from '@oada/types/oada/link/v1'
 import { Change } from '@oada/types/oada/change/v2'
 import { SocketResponse } from '@oada/client/dist/websocket'
@@ -193,12 +194,19 @@ export class ListWatch<Item = unknown> {
               }
 
               info(`Detected new item ${id} in ${path}, rev ${rev}`)
-              const { data: item } = await conn.get({
+              const { data: item } = await conn.get<Resource>({
                 path: `${path}/${id}`
               })
+              const { _rev } = item
               this.assertItem(item)
-              await this.onAddItem?.(item, id)
-              await this.onItem?.(item, id)
+              try {
+                await this.onAddItem?.(item, id)
+                this.meta.handled = { [id]: { onAddItem: { rev: _rev + '' } } }
+              } finally {
+                // Call this even if previous callback errored
+                await this.onItem?.(item, id)
+                this.meta.handled = { [id]: { onItem: { rev: _rev + '' } } }
+              }
             } else {
               // TODO: What should we do now??
               warn(`Ignoring non-link key added to list ${path}, rev ${rev}`)
@@ -221,7 +229,12 @@ export class ListWatch<Item = unknown> {
 
             if (lchange === null) {
               info(`Detected removal of item ${id} from ${path}, rev ${rev}`)
-              this.onRemoveItem?.(id)
+              try {
+                await this.onRemoveItem?.(id)
+              } finally {
+                // Mark for delete?
+                this.meta.handled = { [id]: undefined }
+              }
             } else {
               // TODO: What does this mean??
               warn(`Ignoring non-link key added to list ${path}, rev ${rev}`)
@@ -303,13 +316,21 @@ export class ListWatch<Item = unknown> {
                   path: pointer.compile(rest),
                   body: body as {}
                 }
-                await this.onChangeItem?.(change, id)
-                if (this.onItem) {
-                  const { data: item } = await conn.get({
-                    path: `${path}/${id}`
-                  })
-                  this.assertItem(item)
-                  await this.onItem(item, id)
+                const { _rev } = change
+                try {
+                  await this.onChangeItem?.(change, id)
+                  this.meta.handled = {
+                    [id]: { onChangeItem: { rev: _rev + '' } }
+                  }
+                } finally {
+                  if (this.onItem) {
+                    const { data: item } = await conn.get({
+                      path: `${path}/${id}`
+                    })
+                    this.assertItem(item)
+                    await this.onItem(item, id)
+                    this.meta.handled = { [id]: { onItem: { rev: _rev + '' } } }
+                  }
                 }
                 break
 
