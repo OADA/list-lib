@@ -40,6 +40,20 @@ type DeepPartial<T> = {
   [P in keyof T]?: DeepPartial<T[P]>
 }
 
+type ItemState = 'new' | 'modified' | 'handled'
+type ItemStateCB = (id: string) => Promise<ItemState>
+type ItemStateCBwItem<Item> = (id: string, item: Item) => Promise<ItemState>
+
+function stateCBnoItem<Item> (
+  cb: ItemStateCB | ItemStateCBwItem<Item>
+): cb is ItemStateCB {
+  return cb.length < 2
+}
+
+function assertNever (val: never, mesg?: string) {
+  throw new Error(mesg ?? `Bad value: ${val}`)
+}
+
 type Options<Item> = {
   /**
    * Path to an OADA list to watch for items
@@ -97,6 +111,12 @@ type Options<Item> = {
    * Called when the list itself is deleted
    */
   onDeleteList?: () => Promise<void>
+  /**
+   * Called when "handled" state of an item is unclear
+   *
+   * @todo think of a better name
+   */
+  getItemState?: ItemStateCB | ItemStateCBwItem<Item>
 }
 
 export class ListWatch<Item = unknown> {
@@ -117,6 +137,7 @@ export class ListWatch<Item = unknown> {
   private onItem?
   private onRemoveItem?
   private onDeleteList
+  private getItemState
 
   constructor ({
     path,
@@ -136,6 +157,11 @@ export class ListWatch<Item = unknown> {
       // TODO: Actually handle the list being deleted (redo watch?)
       error(`Unhandled delete of list ${path}`)
       process.exit()
+    },
+    getItemState = async (id: string) => {
+      // If no callback given, assume everything unknown is new
+      warn(`Assuming item ${id} is new`)
+      return 'new' as ItemState
     }
   }: Options<Item>) {
     this.path = path
@@ -149,6 +175,7 @@ export class ListWatch<Item = unknown> {
     this.onItem = onItem
     this.onRemoveItem = onRemoveItem
     this.onDeleteList = onDeleteList
+    this.getItemState = getItemState
 
     this.meta = new Metadata({
       // Don't persist metdata if service does not "resume"
@@ -174,6 +201,60 @@ export class ListWatch<Item = unknown> {
     await this.meta.persist()
   }
 
+  private async handleNewItem (rev: string, id: string, item: Resource) {
+    const { path } = this
+
+    info(`Detected new item ${id} in ${path}, rev ${rev}`)
+    const { _rev } = item
+    this.assertItem(item)
+
+    try {
+      // Double check this is a new item?
+      if (!this.meta.handled[id]?.onAddItem) {
+        await this.onAddItem?.(item, id)
+        this.meta.handled = {
+          [id]: { onAddItem: { rev: _rev + '' } }
+        }
+      }
+    } finally {
+      // Call this even if previous callback errored
+
+      // TODO: Do I need to make a fake "change" to the item
+      // or will the feed have one??
+
+      // Double check this item is actually newer than last time
+      if (+_rev > +(this.meta.handled[id]?.onItem?.rev ?? 0)) {
+        await this.onItem?.(item, id)
+        this.meta.handled = { [id]: { onItem: { rev: _rev + '' } } }
+      }
+    }
+  }
+
+  private async handleItemChange (id: string, change: Change) {
+    const { conn, path } = this
+    const rev = change.body._rev as string
+
+    // TODO: How best to handle change to a descendant of an item?
+    info(`Detected change to item ${id} in ${path}, rev ${rev}`)
+
+    const { _rev } = change
+    try {
+      await this.onChangeItem?.(change, id)
+      this.meta.handled = {
+        [id]: { onChangeItem: { rev: _rev + '' } }
+      }
+    } finally {
+      if (this.onItem) {
+        const { data: item } = await conn.get({
+          path: `${path}/${id}`
+        })
+        this.assertItem(item)
+        await this.onItem(item, id)
+        this.meta.handled = { [id]: { onItem: { rev: _rev + '' } } }
+      }
+    }
+  }
+
   private async handleListChange (
     list: DeepPartial<List>,
     type: Change['type']
@@ -191,32 +272,10 @@ export class ListWatch<Item = unknown> {
 
             // If there is an _id this is a new link in the list right?
             if (lchange._id) {
-              info(`Detected new item ${id} in ${path}, rev ${rev}`)
               const { data: item } = await conn.get<Resource>({
                 path: `${path}/${id}`
               })
-              const { _rev } = item
-              this.assertItem(item)
-              try {
-                // Double check this is a new item?
-                if (!this.meta.handled[id]?.onAddItem) {
-                  await this.onAddItem?.(item, id)
-                  this.meta.handled = {
-                    [id]: { onAddItem: { rev: _rev + '' } }
-                  }
-                }
-              } finally {
-                // Call this even if previous callback errored
-
-                // TODO: Do I need to make a fake "change" to the item
-                // or will the feed have one??
-
-                // Double check this item is actually newer than last time
-                if (+_rev > +(this.meta.handled[id]?.onItem?.rev ?? 0)) {
-                  await this.onItem?.(item, id)
-                  this.meta.handled = { [id]: { onItem: { rev: _rev + '' } } }
-                }
-              }
+              await this.handleNewItem(rev + '', id, item)
             } else {
               // TODO: What should we do now??
               warn(`Ignoring non-link key added to list ${path}, rev ${rev}`)
@@ -288,10 +347,59 @@ export class ListWatch<Item = unknown> {
     let rev = this.meta.rev
     if (currentItemsNew) {
       const { data: list } = await conn.get<List>({ path })
+      const items = Object.keys(list).filter(k => !k.match(/^_/))
 
-      // Feed in current state as fake merge change
-      rev = list._rev + ''
-      await this.handleListChange(list as DeepPartial<List>, 'merge')
+      await Bluebird.map(items, async id => {
+        try {
+          let state: ItemState
+          if (!stateCBnoItem(this.getItemState)) {
+            const { data: item } = await this.conn.get({
+              path: `${path}/${id}`
+            })
+            this.assertItem(item)
+            state = await this.getItemState(id, item)
+          } else {
+            state = await this.getItemState(id)
+          }
+
+          switch (state) {
+            case 'new':
+              {
+                const { data: item } = await this.conn.get<Resource>({
+                  path: `${path}/${id}`
+                })
+                await this.handleNewItem(list._rev + '', id, item)
+              }
+              break
+            case 'modified':
+              {
+                const { data: item } = await this.conn.get({
+                  path: `${path}/${id}`
+                })
+                const change: Change = {
+                  resource_id: list[id]._id,
+                  path: '',
+                  // TODO: what is the type the change??
+                  type: 'merge',
+                  body: item as {}
+                }
+                await this.handleItemChange(id, change)
+              }
+              break
+            case 'handled':
+              info(`Recoding item ${id} as handled for ${path}`)
+              // Mark handled for all callbacks?
+              this.meta.handled = {
+                [id]: { onAddItem: { rev }, onItem: { rev } }
+              }
+              break
+            default:
+              assertNever(state)
+          }
+        } catch (err) {
+          error(err)
+        }
+      })
     }
 
     // Setup watch on the path
@@ -316,39 +424,15 @@ export class ListWatch<Item = unknown> {
         try {
           // The actual change was to an item in the list (or a descendant)
           if (id) {
-            switch (type) {
-              case 'merge':
-                // TODO: How best to handle change to a descendant of an item?
-                info(`Detected change to item ${id} in ${path}, rev ${rev}`)
-                const change: Change = {
-                  ...ctx,
-                  type,
-                  path: pointer.compile(rest),
-                  body: body as {}
-                }
-                const { _rev } = change
-                try {
-                  await this.onChangeItem?.(change, id)
-                  this.meta.handled = {
-                    [id]: { onChangeItem: { rev: _rev + '' } }
-                  }
-                } finally {
-                  if (this.onItem) {
-                    const { data: item } = await conn.get({
-                      path: `${path}/${id}`
-                    })
-                    this.assertItem(item)
-                    await this.onItem(item, id)
-                    this.meta.handled = { [id]: { onItem: { rev: _rev + '' } } }
-                  }
-                }
-                break
-
-              case 'delete':
-                // TODO: What would this mean??
-                break
+            // Make change start at item instead of the list
+            const change: Change = {
+              ...ctx,
+              type,
+              path: pointer.compile(rest),
+              body: body as {}
             }
 
+            await this.handleItemChange(id, change)
             return
           }
 
