@@ -1,15 +1,18 @@
 import test from 'ava'
 import sinon from 'sinon'
 import Bluebird from 'bluebird'
-import { OADAClient } from '@oada/client'
 
 import { Change } from '@oada/types/oada/change/v2'
+
+import { createStub } from './conn-stub'
+
 import { ListWatch } from './'
+import { PUTRequest } from '@oada/client'
 
 const name = 'oada-list-lib-test'
 
 test('should resume from last rev', async t => {
-  const conn = sinon.createStubInstance(OADAClient, {})
+  const conn = createStub()
   // A Change from adding an item to a list
   // TODO: Better way to do this test without actually runnig oada?
   const path = '/bookmarks'
@@ -22,6 +25,7 @@ test('should resume from last rev', async t => {
     path,
     name,
     conn,
+    resume: true,
     // Create spies to see which callbacks run
     onAddItem: sinon.spy(),
     onChangeItem: sinon.spy(),
@@ -33,10 +37,10 @@ test('should resume from last rev', async t => {
   // TODO: How to do this right in ava?
   await Bluebird.delay(5)
 
-  t.is(conn.watch.firstCall.args[0].rev, rev)
+  t.is(conn.watch.firstCall?.args?.[0]?.rev, rev)
 })
 test('should persist rev to _meta', async t => {
-  const conn = sinon.createStubInstance(OADAClient, {})
+  const conn = createStub()
   // A Change from adding an item to a list
   // TODO: Better way to do this test without actually runnig oada?
   const path = '/bookmarks'
@@ -63,6 +67,7 @@ test('should persist rev to _meta', async t => {
     path,
     name,
     conn,
+    resume: true,
     persistInterval: 10,
     // Create spies to see which callbacks run
     onAddItem: sinon.spy(),
@@ -78,16 +83,19 @@ test('should persist rev to _meta', async t => {
   // TODO: How to do this right in ava?
   await Bluebird.delay(5)
 
-  const cb = conn.watch.firstCall.args[0].watchCallback as (
+  const cb = conn.watch.firstCall?.args?.[0]?.watchCallback as (
     change: Change
   ) => Promise<void>
-  await Bluebird.map(change, c => cb(c))
+  await Bluebird.map(change, c => cb?.(c))
 
   await Bluebird.delay(100)
 
-  t.is(
-    // @ts-ignore
-    conn.put.firstCall.args[0].data?._meta?.['oada-list-lib']?.[name]?.rev,
-    '4'
+  t.assert(
+    conn.put.calledWithMatch({
+      path: `${path}/_meta/oada-list-lib/${name}`,
+      data: {
+        rev: '4'
+      }
+    } as PUTRequest)
   )
 })

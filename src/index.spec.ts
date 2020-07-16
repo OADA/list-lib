@@ -3,26 +3,29 @@ import sinon from 'sinon'
 import Bluebird from 'bluebird'
 
 import { Change } from '@oada/types/oada/change/v2'
-import { OADAClient, WatchRequest } from '@oada/client'
+
+import { createStub } from './conn-stub'
 
 import { ListWatch } from './'
 
 const name = 'oada-list-lib-test'
 
+const delay = 11
+
 test('it should WATCH given path', async t => {
-  const conn = sinon.createStubInstance(OADAClient, {})
+  const conn = createStub()
   const path = '/bookmarks/foo/bar'
 
   new ListWatch({ path, name, conn })
   t.plan(1)
 
   // TODO: How to do this right in ava?
-  await Bluebird.delay(5)
+  await Bluebird.delay(delay)
 
-  t.assert(conn.watch.calledWithMatch({ path } as WatchRequest))
+  t.is(conn.watch.firstCall?.args?.[0]?.path, path)
 })
 test('it should UNWATCH on stop()', async t => {
-  const conn = sinon.createStubInstance(OADAClient, {})
+  const conn = createStub()
   const path = '/bookmarks/foo/bar'
   const id = 'foobar'
 
@@ -31,17 +34,17 @@ test('it should UNWATCH on stop()', async t => {
   const watch = new ListWatch({ path, name, conn })
 
   // TODO: How to do this right in ava?
-  await Bluebird.delay(5)
+  await Bluebird.delay(delay)
 
   await watch.stop()
 
   t.is(conn.unwatch.callCount, 1)
-  t.is(conn.unwatch.firstCall.args[0], id)
+  t.is(conn.unwatch.firstCall?.args?.[0], id)
 })
 test.todo('it should reconnect WATCH')
 
 test('it should detect new item', async t => {
-  const conn = sinon.createStubInstance(OADAClient, {})
+  const conn = createStub()
   // A Change from adding an item to a list
   // TODO: Better way to do this test without actually runnig oada?
   const path = '/bookmarks'
@@ -66,6 +69,8 @@ test('it should detect new item', async t => {
       type: 'merge'
     }
   ]
+  // @ts-ignore
+  conn.get.resolves({ data: { _rev: 4 } })
 
   const opts = {
     path,
@@ -80,12 +85,12 @@ test('it should detect new item', async t => {
 
   new ListWatch(opts)
   // TODO: How to do this right in ava?
-  await Bluebird.delay(5)
+  await Bluebird.delay(delay)
 
-  const cb = conn.watch.firstCall.args[0].watchCallback as (
+  const cb = conn.watch.firstCall?.args?.[0]?.watchCallback as (
     change: Change
   ) => Promise<void>
-  await Bluebird.map(change, c => cb(c))
+  await Bluebird.map(change, c => cb?.(c))
 
   t.is(opts.onAddItem.callCount, 1)
   t.is(opts.onItem.callCount, 1)
@@ -93,7 +98,7 @@ test('it should detect new item', async t => {
   t.is(opts.onRemoveItem.callCount, 0)
 })
 test('it should detect removed item', async t => {
-  const conn = sinon.createStubInstance(OADAClient, {})
+  const conn = createStub()
   // A Change from adding an item to a list
   // TODO: Better way to do this test without actually runnig oada?
   const path = '/bookmarks'
@@ -127,12 +132,12 @@ test('it should detect removed item', async t => {
 
   new ListWatch(opts)
   // TODO: How to do this right in ava?
-  await Bluebird.delay(5)
+  await Bluebird.delay(delay)
 
-  const cb = conn.watch.firstCall.args[0].watchCallback as (
+  const cb = conn.watch.firstCall?.args?.[0]?.watchCallback as (
     change: Change
   ) => Promise<void>
-  await Bluebird.map(change, c => cb(c))
+  await Bluebird.map(change, c => cb?.(c))
 
   t.is(opts.onAddItem.callCount, 0)
   t.is(opts.onItem.callCount, 0)
@@ -140,4 +145,3 @@ test('it should detect removed item', async t => {
   t.is(opts.onRemoveItem.callCount, 1)
 })
 test.todo('it should detect modified item')
-
