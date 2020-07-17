@@ -187,10 +187,86 @@ export class ListWatch<Item = unknown> {
     this.initialize().catch(error)
   }
 
+  /**
+   * Force library to recheck all current list items
+   * @see getItemState
+   * @param all - check even items we think were handled
+   *
+   * @todo Better name?
+   */
+  public async forceRecheck (all = false) {
+    const { conn, path } = this
+
+    const { data: list } = await conn.get<List>({ path })
+    const items = Object.keys(list).filter(k => !k.match(/^_/))
+
+    const { rev } = this.meta
+    await Bluebird.map(items, async id => {
+      try {
+        if (!all && this.meta.handled[id]) {
+          // We think this item is handled
+          return
+        }
+
+        // Ask lib user for state of this item
+        let state: ItemState
+        if (!stateCBnoItem(this.getItemState)) {
+          const { data: item } = await this.conn.get({
+            path: `${path}/${id}`
+          })
+          this.assertItem(item)
+          state = await this.getItemState(id, item)
+        } else {
+          state = await this.getItemState(id)
+        }
+
+        switch (state) {
+          case 'new':
+            {
+              const { data: item } = await this.conn.get<Resource>({
+                path: `${path}/${id}`
+              })
+              await this.handleNewItem(list._rev + '', id, item)
+            }
+            break
+          case 'modified':
+            {
+              const { data: item } = await this.conn.get({
+                path: `${path}/${id}`
+              })
+              const change: Change = {
+                resource_id: list[id]._id,
+                path: '',
+                // TODO: what is the type the change??
+                type: 'merge',
+                body: item as {}
+              }
+              await this.handleItemChange(id, change)
+            }
+            break
+          case 'handled':
+            info(`Recoding item ${id} as handled for ${path}`)
+            // Mark handled for all callbacks?
+            this.meta.handled = {
+              [id]: { onAddItem: { rev }, onItem: { rev } }
+            }
+            break
+          default:
+            assertNever(state)
+        }
+      } catch (err) {
+        error(err)
+      }
+    })
+  }
+
+  /**
+   * Clean up metadata and unwatch list
+   */
   public async stop () {
     await this.conn.unwatch(this.id!)
     await this.persistMeta()
-    this.meta?.stop()
+    this.meta.stop()
   }
 
   /**
@@ -281,7 +357,6 @@ export class ListWatch<Item = unknown> {
               warn(`Ignoring non-link key added to list ${path}, rev ${rev}`)
             }
           } catch (err) {
-            // TODO: Keep track of failed items in meta or something
             // Log error with this item but continue map over other items
             error(
               `Error processing change for ${id} at ${path}, rev ${rev}: %O`,
@@ -344,65 +419,12 @@ export class ListWatch<Item = unknown> {
     // TODO: Clean up control flow to not need this?
     const currentItemsNew = !(await this.meta.init()) || !this.resume
 
-    let rev = this.meta.rev
     if (currentItemsNew) {
-      const { data: list } = await conn.get<List>({ path })
-      const items = Object.keys(list).filter(k => !k.match(/^_/))
-
-      await Bluebird.map(items, async id => {
-        try {
-          let state: ItemState
-          if (!stateCBnoItem(this.getItemState)) {
-            const { data: item } = await this.conn.get({
-              path: `${path}/${id}`
-            })
-            this.assertItem(item)
-            state = await this.getItemState(id, item)
-          } else {
-            state = await this.getItemState(id)
-          }
-
-          switch (state) {
-            case 'new':
-              {
-                const { data: item } = await this.conn.get<Resource>({
-                  path: `${path}/${id}`
-                })
-                await this.handleNewItem(list._rev + '', id, item)
-              }
-              break
-            case 'modified':
-              {
-                const { data: item } = await this.conn.get({
-                  path: `${path}/${id}`
-                })
-                const change: Change = {
-                  resource_id: list[id]._id,
-                  path: '',
-                  // TODO: what is the type the change??
-                  type: 'merge',
-                  body: item as {}
-                }
-                await this.handleItemChange(id, change)
-              }
-              break
-            case 'handled':
-              info(`Recoding item ${id} as handled for ${path}`)
-              // Mark handled for all callbacks?
-              this.meta.handled = {
-                [id]: { onAddItem: { rev }, onItem: { rev } }
-              }
-              break
-            default:
-              assertNever(state)
-          }
-        } catch (err) {
-          error(err)
-        }
-      })
+      await this.forceRecheck(true)
     }
 
     // Setup watch on the path
+    const { rev } = this.meta
     this.id = await conn.watch({
       path,
       rev: this.resume ? this.meta.rev : rev,
