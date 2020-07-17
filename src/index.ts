@@ -54,11 +54,16 @@ function assertNever (val: never, mesg?: string) {
   throw new Error(mesg ?? `Bad value: ${val}`)
 }
 
-type Options<Item> = {
+export type Options<Item> = {
   /**
    * Path to an OADA list to watch for items
    */
   path: string
+  /**
+   * OADA Tree for the path
+   * @see path
+   */
+  tree?: object
   /**
    * A persistent name/id for this instance (can just be random string)
    *
@@ -120,8 +125,9 @@ type Options<Item> = {
 }
 
 export class ListWatch<Item = unknown> {
-  public path
-  public name
+  public readonly path
+  public readonly tree
+  public readonly name
   private resume
   private conn
   private id?: string
@@ -141,6 +147,7 @@ export class ListWatch<Item = unknown> {
 
   constructor ({
     path,
+    tree,
     name,
     resume = false,
     conn,
@@ -165,6 +172,7 @@ export class ListWatch<Item = unknown> {
     }
   }: Options<Item>) {
     this.path = path
+    this.tree = tree
     this.name = name
     this.resume = resume
     this.conn = conn as ConnI
@@ -384,7 +392,6 @@ export class ListWatch<Item = unknown> {
               warn(`Ignoring non-link key added to list ${path}, rev ${rev}`)
             }
           } catch (err) {
-            // TODO: Keep track of failed items in meta or something
             // Log error with this item but continue map over other items
             error(
               `Error processing change for ${id} at ${path}, rev ${rev}: %O`,
@@ -399,7 +406,7 @@ export class ListWatch<Item = unknown> {
   }
 
   private async initialize () {
-    const { path, conn } = this
+    const { path, tree, conn } = this
 
     // TODO: Support a tree?
     info(`Ensuring ${path} exists`)
@@ -408,7 +415,7 @@ export class ListWatch<Item = unknown> {
     } catch (err) {
       if (err.status === 403 || err.status === 404) {
         // Create it
-        await conn.put({ path, data: {} })
+        await conn.put({ path, tree, data: {} })
         trace(`Created ${path} because it did not exist`)
       } else {
         error(err)
@@ -462,7 +469,6 @@ export class ListWatch<Item = unknown> {
           const list = body as DeepPartial<List>
           itemsFound = (await this.handleListChange(list, type)) || itemsFound
         } catch (err) {
-          // TODO: Keep track of failed items in meta or something
           error(
             `Error processing change for ${id} at ${path}, rev ${rev}: %O`,
             err

@@ -99,7 +99,12 @@ export class Metadata {
     }
   }
 
-  // TODO: I hate needing to call init...
+  /**
+   * Initialize the connection to the meta resource
+   * @returns whether existing metadata was found
+   *
+   * @TODO I hate needing to call init...
+   */
   public async init (): Promise<boolean> {
     // Try to get our metadata about this list
     try {
@@ -148,6 +153,9 @@ export class Metadata {
     this._updated = false
   }
 
+  /**
+   * Stop the interval to check for changes to meta
+   */
   public stop () {
     this.interval && clearInterval(this.interval)
   }
