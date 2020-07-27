@@ -4,6 +4,8 @@ import { ConnI } from '.'
 
 /**
  * Record of successfully handled list item(s)
+ *
+ * @internal
  */
 export type Items = {
   /**
@@ -23,6 +25,8 @@ export type Items = {
 
 /**
  * Persistent data we store in the _meta of the list
+ *
+ * @internal
  */
 export class Metadata {
   /**

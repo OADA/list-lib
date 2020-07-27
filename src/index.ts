@@ -4,7 +4,7 @@ import debug from 'debug'
 
 // TODO: Should this lib be specific to oada client??
 // prettier-ignore
-import type { OADAClient, GETRequest } from '@oada/client'
+import type { GETRequest } from '@oada/client'
 
 import { TypeAssert } from '@oada/types'
 import { Resource } from '@oada/types/oada/resource'
@@ -12,6 +12,7 @@ import { List, Link } from '@oada/types/oada/link/v1'
 import { Change } from '@oada/types/oada/change/v2'
 import { SocketResponse } from '@oada/client/dist/websocket'
 
+import { Options, ItemState } from './Options'
 import { Metadata } from './Metadata'
 
 const info = debug('oada-list-lib:info')
@@ -19,18 +20,15 @@ const warn = debug('oada-list-lib:warn')
 const trace = debug('oada-list-lib:trace')
 const error = debug('oada-list-lib:error')
 
-// Accept anything with same method signatures as OADAClient
-export type Conn = {
-  get: OADAClient['get']
-  head: OADAClient['head']
-  put: OADAClient['put']
-  post: OADAClient['post']
-  delete: OADAClient['delete']
-  watch: OADAClient['watch']
-  unwatch: OADAClient['unwatch']
-}
+/**
+ * @public
+ */
+export { Options, ItemState }
 
-export type ConnI = Conn & {
+/**
+ * @internal
+ */
+export type ConnI = Options<unknown>['conn'] & {
   // Make get less annoying
   get<T = unknown>(request: GETRequest): Promise<SocketResponse & { data: T }>
 }
@@ -40,90 +38,18 @@ type DeepPartial<T> = {
   [P in keyof T]?: DeepPartial<T[P]>
 }
 
-type ItemState = 'new' | 'modified' | 'handled'
-type ItemStateCB = (id: string) => Promise<ItemState>
-type ItemStateCBwItem<Item> = (id: string, item: Item) => Promise<ItemState>
-
-function stateCBnoItem<Item> (
-  cb: ItemStateCB | ItemStateCBwItem<Item>
-): cb is ItemStateCB {
-  return cb.length < 2
-}
-
 function assertNever (val: never, mesg?: string) {
   throw new Error(mesg ?? `Bad value: ${val}`)
 }
 
-export type Options<Item> = {
-  /**
-   * Path to an OADA list to watch for items
-   */
-  path: string
-  /**
-   * OADA Tree for the path
-   * @see path
-   */
-  tree?: object
-  /**
-   * A persistent name/id for this instance (can just be random string)
-   *
-   * It is used to prevent collisions in storage library metadata.
-   */
-  name: string
-  /**
-   * true: "resume" change feed for list from last processed rev
-   * false: just start from current state of the list
-   *
-   * @todo should default be true instead??
-   * @default false
-   */
-  resume?: boolean
-  /**
-   * An OADAClient instance (or something with the same API)
-   */
-  conn: Conn
-
-  /**
-   * How frequently to save state to OADA (in ms)
-   *
-   * @default 1000
-   */
-  persistInterval?: number
-
-  /**
-   * Function to assert if an object is an Item.
-   * Items which fail this check will be ignored.
-   */
-  assertItem?: TypeAssert<Item>
-
-  /**
-   * Called when a new item is added to the list
-   */
-  onAddItem?: (item: Item, id: string) => Promise<void>
-  /**
-   * Called when an existing item is modified in the list
-   */
-  onChangeItem?: (change: Change, id: string) => Promise<void>
-  /**
-   * Called when an item is added or changed
-   */
-  onItem?: (item: Item, id: string) => Promise<void>
-  /**
-   * Called when an item is removed from the list
-   */
-  onRemoveItem?: (id: string) => Promise<void>
-  /**
-   * Called when the list itself is deleted
-   */
-  onDeleteList?: () => Promise<void>
-  /**
-   * Called when "handled" state of an item is unclear
-   *
-   * @todo think of a better name
-   */
-  getItemState?: ItemStateCB | ItemStateCBwItem<Item>
-}
-
+/**
+ * The main class of this library.
+ * Watches an OADA list and calls various callbacks when appropriate.
+ *
+ * @public
+ * @typeParam Item  The type of the items linked in the list
+ * @see Options
+ */
 export class ListWatch<Item = unknown> {
   public readonly path
   public readonly tree
@@ -152,10 +78,8 @@ export class ListWatch<Item = unknown> {
     resume = false,
     conn,
     persistInterval = 1000,
-    /**
-     * If no assert given, assume all items valid
-     */
-    assertItem = () => {},
+    // If no assert given, assume all items valid
+    assertItem = _ => {},
     onAddItem,
     onChangeItem,
     onItem,
@@ -165,10 +89,10 @@ export class ListWatch<Item = unknown> {
       error(`Unhandled delete of list ${path}`)
       process.exit()
     },
+    // If no callback given, assume everything unknown is new
     getItemState = async (id: string) => {
-      // If no callback given, assume everything unknown is new
       warn(`Assuming item ${id} is new`)
-      return 'new' as ItemState
+      return ItemState.New
     }
   }: Options<Item>) {
     this.path = path
@@ -198,7 +122,7 @@ export class ListWatch<Item = unknown> {
   /**
    * Force library to recheck all current list items
    * @see getItemState
-   * @param all - check even items we think were handled
+   * @param all check even items we think were handled
    *
    * @todo Better name?
    */
@@ -229,7 +153,7 @@ export class ListWatch<Item = unknown> {
         }
 
         switch (state) {
-          case 'new':
+          case ItemState.New:
             {
               const { data: item } = await this.conn.get<Resource>({
                 path: `${path}/${id}`
@@ -237,7 +161,7 @@ export class ListWatch<Item = unknown> {
               await this.handleNewItem(list._rev + '', id, item)
             }
             break
-          case 'modified':
+          case ItemState.Modified:
             {
               const { data: item } = await this.conn.get({
                 path: `${path}/${id}`
@@ -252,7 +176,7 @@ export class ListWatch<Item = unknown> {
               await this.handleItemChange(id, change)
             }
             break
-          case 'handled':
+          case ItemState.Handled:
             info(`Recoding item ${id} as handled for ${path}`)
             // Mark handled for all callbacks?
             this.meta.handled = {
@@ -405,10 +329,12 @@ export class ListWatch<Item = unknown> {
     return items.length > 0
   }
 
+  /**
+   * Do async stuff for initializing ourself since constructors are syncronous
+   */
   private async initialize () {
     const { path, tree, conn } = this
 
-    // TODO: Support a tree?
     info(`Ensuring ${path} exists`)
     try {
       await conn.head({ path })
@@ -483,4 +409,12 @@ export class ListWatch<Item = unknown> {
       }
     })
   }
+}
+
+// Gross stuff to make TS handle optional second param for callback
+type ItemStateNoItemCB = (id: string) => Promise<ItemState>
+function stateCBnoItem<Item> (
+  cb: ItemStateNoItemCB | NonNullable<Options<Item>['getItemState']>
+): cb is ItemStateNoItemCB {
+  return cb.length < 2
 }

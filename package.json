@@ -1,10 +1,19 @@
 {
   "name": "@oada/list-lib",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Library for processing items in an OADA list",
   "main": "lib/index.js",
+  "typings": "lib/index.d.ts",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/OADA/list-lib.git"
+  },
   "author": "Alex Layton <alex@layton.in>",
   "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/OADA/list-lib/issues"
+  },
+  "homepage": "https://github.com/OADA/list-lib",
   "scripts": {
     "build": "tsc",
     "pretest": "npm run build",
