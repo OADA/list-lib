@@ -20,7 +20,6 @@ const error = debug('oada-list-lib:error');
  * Type for a single V2 OADA change (rather than the array)
  *
  * @todo fix the Change V2 types
- * @internal
  */
 export type Change = V2Changes[0];
 
