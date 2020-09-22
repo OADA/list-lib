@@ -1,6 +1,7 @@
-import assign from 'object-assign-deep'
+import assign from 'object-assign-deep';
 
-import { ConnI } from '.'
+import { Conn } from './Options';
+import { GetResponse } from '.';
 
 /**
  * Record of successfully handled list item(s)
@@ -18,10 +19,10 @@ export type Items = {
          * The callback which ran on item
          */
         [callback: string]: {
-          rev: string
-        }
-      }
-}
+          rev: string;
+        };
+      };
+};
 
 /**
  * Persistent data we store in the _meta of the list
@@ -32,74 +33,74 @@ export class Metadata {
   /**
    * @todo: Where in _meta to keep stuff?
    */
-  public static META_KEY = 'oada-list-lib'
+  public static readonly META_KEY = 'oada-list-lib';
 
   /**
    * The rev we left off on
    */
-  private _rev = '0'
+  #rev = '0';
   /**
    * Track "error" items
    */
-  private _handled: Items = {}
+  #handled: Items = {};
 
-  private interval?
+  #interval?;
   /**
    * Flag to track whenever any state gets set
    */
-  private _updated: boolean
+  #updated: boolean;
 
   // Where to store state
-  private conn
-  private path
+  #conn;
+  #path;
 
-  get rev (): string {
-    return this._rev
+  get rev(): string {
+    return this.#rev;
   }
-  set rev (rev) {
-    this._rev = rev
-    this._updated = true
+  set rev(rev) {
+    this.#rev = rev;
+    this.#updated = true;
   }
 
   // TODO: IDK about this...
-  set handled (items) {
-    assign(this._handled, items)
-    this._updated = true
+  set handled(items) {
+    assign(this.#handled, items);
+    this.#updated = true;
   }
 
-  get handled () {
-    return this._handled
+  get handled() {
+    return this.#handled;
   }
 
-  toJSON (): object {
+  toJSON(): object {
     return {
       rev: this.rev,
-      handled: this.handled
-    }
+      handled: this.handled,
+    };
   }
 
-  constructor ({
+  constructor({
     conn,
     path,
     name,
-    persistInterval
+    persistInterval,
   }: {
     /**
      * The path to the resource with which to associate this metadata
      */
-    path: string
-    name: string
-    conn: ConnI
-    persistInterval: number
+    path: string;
+    name: string;
+    conn: Conn;
+    persistInterval: number;
   }) {
-    this._updated = false
+    this.#updated = false;
 
-    this.conn = conn
-    this.path = `${path}/_meta/${Metadata.META_KEY}/${name}`
+    this.#conn = conn;
+    this.#path = `${path}/_meta/${Metadata.META_KEY}/${name}`;
 
     // Periodically persist state to _meta
     if (persistInterval) {
-      this.interval = setInterval(() => this.persist(), persistInterval)
+      this.#interval = setInterval(() => this.persist(), persistInterval);
     }
   }
 
@@ -109,23 +110,23 @@ export class Metadata {
    *
    * @TODO I hate needing to call init...
    */
-  public async init (): Promise<boolean> {
+  public async init(): Promise<boolean> {
     // Try to get our metadata about this list
     try {
-      const { data } = await this.conn.get<Metadata>({
-        path: this.path
-      })
-      Object.assign(this, data)
-      return true
-    } catch (err) {
+      const { data } = (await this.#conn.get({
+        path: this.#path,
+      })) as GetResponse<Metadata>;
+      Object.assign(this, data);
+      return true;
+    } catch (err: unknown) {
       // Create our metadata
-      const { headers } = await this.conn.post({
+      const { headers } = await this.#conn.post({
         path: '/resources/',
-        data: this as {}
-      })
-      const id = headers['content-location'].replace(/^\//, '')
-      await this.conn.put({ path: this.path, data: { _id: id } })
-      return false
+        data: this as {},
+      });
+      const id = headers['content-location'].replace(/^\//, '');
+      await this.#conn.put({ path: this.#path, data: { _id: id } });
+      return false;
     }
   }
 
@@ -133,34 +134,34 @@ export class Metadata {
    * Persist relevant info to the _meta of the list.
    * This preserves it across restarts.
    */
-  public async persist () {
-    if (!this._updated || !this.interval) {
+  public async persist() {
+    if (!this.#updated || !this.#interval) {
       // Avoid PUTing to _meta needlessly
-      return
+      return;
     }
 
     // Removing keys in OADA is annoying
     // TODO: Is it better to just DELETE the whole thing and then put?
     for (const id in this.handled) {
       if (!this.handled[id]) {
-        await this.conn.delete({
-          path: `${this.path}/${id}`
-        })
-        delete this.handled[id]
+        await this.#conn.delete({
+          path: `${this.#path}/${id}`,
+        });
+        delete this.handled[id];
       }
     }
-    await this.conn.put({
-      path: this.path,
-      data: this as {}
-    })
+    await this.#conn.put({
+      path: this.#path,
+      data: this as {},
+    });
 
-    this._updated = false
+    this.#updated = false;
   }
 
   /**
    * Stop the interval to check for changes to meta
    */
-  public stop () {
-    this.interval && clearInterval(this.interval)
+  public stop() {
+    this.#interval && clearInterval(this.#interval);
   }
 }
