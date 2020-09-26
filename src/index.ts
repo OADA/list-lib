@@ -52,6 +52,25 @@ function assertNever(val: never, mesg?: string): never {
 }
 
 /**
+ * Create a callback which assumes item(s) have the given state.
+ * @param state The ItemsState to assume
+ */
+function assumeItemState<State extends ItemState>(state: State) {
+  function assume(id: readonly string[]): State[];
+  function assume(id: string): State;
+  function assume(id: string | readonly string[]) {
+    warn(`Assuming item(s) ${id} is ${state}`);
+    if (Array.isArray(id)) {
+      const ids = id;
+      return ids.map(() => state);
+    }
+    return state;
+  }
+
+  return assume;
+}
+
+/**
  * The main class of this library.
  * Watches an OADA list and calls various callbacks when appropriate.
  *
@@ -74,10 +93,26 @@ export class ListWatch<Item = unknown> {
    */
   public readonly name;
 
+  /**
+   * Callback to make ListWatch consider every `Item` new
+   *
+   * @see getItemState
+   * @see onNewList
+   * @see ItemState.New
+   */
+  public static readonly AssumeNew = assumeItemState(ItemState.New);
+  /**
+   * Callback to make ListWatch consider every `Item` handled
+   *
+   * @see getItemState
+   * @see onNewList
+   * @see ItemState.Handled
+   */
+  public static readonly AssumeHandled = assumeItemState(ItemState.Handled);
+
   #resume;
   #conn;
   #id?: string;
-  // TODO: This explicit typing thing must be a TS bug?
   #assertItem;
 
   // _meta stuff
@@ -88,6 +123,7 @@ export class ListWatch<Item = unknown> {
   #onChangeItem?;
   #onItem?;
   #onRemoveItem?;
+  #onNewList: NonNullable<Options<Item>['onNewList']>;
   #onDeleteList;
   #getItemState;
 
@@ -99,21 +135,19 @@ export class ListWatch<Item = unknown> {
     conn,
     persistInterval = 1000,
     // If no assert given, assume all items valid
-    assertItem = (_) => {},
+    assertItem = () => {},
     onAddItem,
     onChangeItem,
     onItem,
     onRemoveItem,
+    onNewList,
     onDeleteList = async () => {
       // TODO: Actually handle the list being deleted (redo watch?)
       error(`Unhandled delete of list ${path}`);
       process.exit();
     },
     // If no callback given, assume everything unknown is new
-    getItemState = async (id: string) => {
-      warn(`Assuming item ${id} is new`);
-      return ItemState.New;
-    },
+    getItemState = ListWatch.AssumeNew,
   }: Options<Item>) {
     this.path = path;
     this.tree = tree;
@@ -128,6 +162,21 @@ export class ListWatch<Item = unknown> {
     this.#onRemoveItem = onRemoveItem;
     this.#onDeleteList = onDeleteList;
     this.#getItemState = getItemState;
+
+    if (onNewList) {
+      this.#onNewList = onNewList;
+    } else {
+      // If no callback provided, ask client for states of pre-existing items
+      this.#onNewList = (ids: readonly string[]) => {
+        return Bluebird.map(ids, (id) => {
+          try {
+            return this.getItemState(id);
+          } catch (err) {
+            error(err);
+          }
+        });
+      };
+    }
 
     this.#meta = new Metadata({
       // Don't persist metdata if service does not "resume"
@@ -146,7 +195,12 @@ export class ListWatch<Item = unknown> {
    *
    * @todo Better name?
    */
-  public async forceRecheck(all = false) {
+  public async forceRecheck(
+    /**
+     * @default false
+     */
+    all = false
+  ) {
     const { path } = this;
     const conn = this.#conn;
 
@@ -155,9 +209,6 @@ export class ListWatch<Item = unknown> {
 
     const { rev } = this.#meta;
     await Bluebird.map(items, async (id) => {
-      // Needed because TS is weird about asserts...
-      const assertItem: TypeAssert<Item> = this.#assertItem;
-
       try {
         if (!all && this.#meta.handled[id]) {
           // We think this item is handled
@@ -165,16 +216,7 @@ export class ListWatch<Item = unknown> {
         }
 
         // Ask lib user for state of this item
-        let state: ItemState;
-        if (!stateCBnoItem(this.#getItemState)) {
-          const { data: item } = await this.#conn.get({
-            path: `${path}/${id}`,
-          });
-          assertItem(item);
-          state = await this.#getItemState(id, item);
-        } else {
-          state = await this.#getItemState(id);
-        }
+        const state = await this.getItemState(id);
 
         switch (state) {
           case ItemState.New:
@@ -214,6 +256,26 @@ export class ListWatch<Item = unknown> {
         error(err);
       }
     });
+  }
+
+  /**
+   * Ask lib user for state of this item
+   *
+   * This handles fetching the Item before invoking the callback if needed
+   */
+  private async getItemState(id: string): Promise<ItemState> {
+    // Needed because TS is weird about asserts...
+    const assertItem: TypeAssert<Item> = this.#assertItem;
+
+    if (!stateCBnoItem(this.#getItemState)) {
+      const { data: item } = await this.#conn.get({
+        path: `${this.path}/${id}`,
+      });
+      assertItem(item);
+      return this.#getItemState(id, item);
+    } else {
+      return this.#getItemState(id);
+    }
   }
 
   /**
@@ -385,7 +447,9 @@ export class ListWatch<Item = unknown> {
     // TODO: Clean up control flow to not need this?
     const currentItemsNew = !(await this.#meta.init()) || !this.#resume;
     if (currentItemsNew) {
-      await this.forceRecheck(true);
+      const { data: list } = (await conn.get({ path })) as GetResponse<List>;
+      const items = Object.keys(list).filter((k) => !k.match(/^_/));
+      await this.#onNewList(items);
     }
 
     // Setup watch on the path
