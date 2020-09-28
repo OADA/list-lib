@@ -207,7 +207,7 @@ export class ListWatch<Item = unknown> {
     const { data: list } = (await conn.get({ path })) as GetResponse<List>;
     const items = Object.keys(list).filter((k) => !k.match(/^_/));
 
-    const { rev } = this.#meta;
+    //const { rev } = this.#meta;
     await Bluebird.map(items, async (id) => {
       try {
         if (!all && this.#meta.handled[id]) {
@@ -218,40 +218,7 @@ export class ListWatch<Item = unknown> {
         // Ask lib user for state of this item
         const state = await this.getItemState(id);
 
-        switch (state) {
-          case ItemState.New:
-            {
-              const { data: item } = (await this.#conn.get({
-                path: `${path}/${id}`,
-              })) as GetResponse<Resource>;
-              await this.handleNewItem(list._rev + '', id, item);
-            }
-            break;
-          case ItemState.Modified:
-            {
-              const { data: item } = await this.#conn.get({
-                path: `${path}/${id}`,
-              });
-              const change: Change = {
-                resource_id: list[id]._id,
-                path: '',
-                // TODO: what is the type the change??
-                type: 'merge',
-                body: item as {},
-              };
-              await this.handleItemChange(id, change);
-            }
-            break;
-          case ItemState.Handled:
-            info(`Recoding item ${id} as handled for ${path}`);
-            // Mark handled for all callbacks?
-            this.#meta.handled = {
-              [id]: { onAddItem: { rev }, onItem: { rev } },
-            };
-            break;
-          default:
-            assertNever(state);
-        }
+        await this.updateItemState(list, id, state);
       } catch (err: unknown) {
         error(err);
       }
@@ -424,6 +391,60 @@ export class ListWatch<Item = unknown> {
   }
 
   /**
+   * Update the states of list items
+   *
+   * @see ItemState
+   */
+  private async updateItemState(
+    list: List,
+    ids: string | readonly string[],
+    states: ItemState | readonly ItemState[]
+  ) {
+    const { path } = this;
+    const { rev } = this.#meta;
+
+    const _ids = Array.isArray(ids) ? ids : [ids];
+    const _states = Array.isArray(states) ? states : [states];
+    await Bluebird.map(_ids, async (id, i) => {
+      const state = _states[i];
+      switch (state) {
+        case ItemState.New:
+          {
+            const { data: item } = (await this.#conn.get({
+              path: `${path}/${id}`,
+            })) as GetResponse<Resource>;
+            await this.handleNewItem(list._rev + '', id, item);
+          }
+          break;
+        case ItemState.Modified:
+          {
+            const { data: item } = await this.#conn.get({
+              path: `${path}/${id}`,
+            });
+            const change: Change = {
+              resource_id: list[id]._id,
+              path: '',
+              // TODO: what is the type the change??
+              type: 'merge',
+              body: item as {},
+            };
+            await this.handleItemChange(id, change);
+          }
+          break;
+        case ItemState.Handled:
+          info(`Recoding item ${id} as handled for ${path}`);
+          // Mark handled for all callbacks?
+          this.#meta.handled = {
+            [id]: { onAddItem: { rev }, onItem: { rev } },
+          };
+          break;
+        default:
+          assertNever(state);
+      }
+    });
+  }
+
+  /**
    * Do async stuff for initializing ourself since constructors are syncronous
    */
   private async initialize() {
@@ -449,7 +470,11 @@ export class ListWatch<Item = unknown> {
     if (currentItemsNew) {
       const { data: list } = (await conn.get({ path })) as GetResponse<List>;
       const items = Object.keys(list).filter((k) => !k.match(/^_/));
-      await this.#onNewList(items);
+
+      // ask for states of pre-existing items
+      const states = await this.#onNewList(items);
+      // Set the states
+      await this.updateItemState(list, items, states);
     }
 
     // Setup watch on the path

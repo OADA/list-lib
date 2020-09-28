@@ -102,6 +102,8 @@ export interface Options<Item> {
    * { onNewList: ListWatch.AssumeHandled, ...otherOptions }
    * @default invoke getItemState on each pre-existing item
    * @see getItemState
+   * @see ListWatch.AssumeNew
+   * @see ListWatch.AssumeHandled
    */
   onNewList?: (ids: readonly string[]) => AllowPromise<ItemState[]>;
   /**
