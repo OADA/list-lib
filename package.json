@@ -57,6 +57,7 @@
     "bluebird": "^3.7.2",
     "debug": "^4.1.1",
     "json-pointer": "^0.6.0",
+    "jsonpath-plus": "^4.0.0",
     "jsonschema8": "^1.1.0",
     "object-assign-deep": "^0.4.0"
   }

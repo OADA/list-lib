@@ -8,11 +8,90 @@ import { Change } from './';
 
 import { createStub } from './conn-stub';
 
-import { ListWatch } from './';
+import { ListWatch, Tree, pathFromTree } from './';
 
 const name = 'oada-list-lib-test';
 
 const delay = 11;
+
+test('it should create JSON Path from simple OADA tree', (t) => {
+  const tree: Tree = {
+    bookmarks: {
+      _type: 'application/vnd.oada.bookmarks.1+json',
+      _rev: 0,
+      thing: {
+        _type: 'application/json',
+        _rev: 0,
+        abc: {
+          '*': {
+            _type: 'application/json',
+            _rev: 0,
+          },
+        },
+      },
+    },
+  };
+
+  const path = pathFromTree(tree);
+
+  t.is(path, '$.bookmarks.thing.abc.*');
+});
+
+test('it should create JSON Path from OADA tree and root', (t) => {
+  const tree: Tree = {
+    bookmarks: {
+      _type: 'application/vnd.oada.bookmarks.1+json',
+      _rev: 0,
+      thing: {
+        _type: 'application/json',
+        _rev: 0,
+        abc: {
+          '*': {
+            _type: 'application/json',
+            _rev: 0,
+          },
+        },
+      },
+    },
+  };
+
+  const path = pathFromTree(tree, '/bookmarks/thing');
+
+  t.is(path, '$.abc.*');
+});
+
+test('it should create JSON Path from two path OADA tree', (t) => {
+  const tree: Tree = {
+    bookmarks: {
+      _type: 'application/vnd.oada.bookmarks.1+json',
+      _rev: 0,
+      thing1: {
+        _type: 'application/json',
+        _rev: 0,
+        abc: {
+          '*': {
+            _type: 'application/json',
+            _rev: 0,
+          },
+        },
+      },
+      thing2: {
+        _type: 'application/json',
+        _rev: 0,
+        abc: {
+          '*': {
+            _type: 'application/json',
+            _rev: 0,
+          },
+        },
+      },
+    },
+  };
+
+  const path = pathFromTree(tree);
+
+  t.is(path, '$.bookmarks.[thing1,thing2].abc.*');
+});
 
 test('it should WATCH given path', async (t) => {
   const conn = createStub();

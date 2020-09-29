@@ -23,6 +23,15 @@ export interface Options<Item> {
    */
   path: string;
   /**
+   * JSON Path to retrieve items from list.
+   *
+   * @default $.*
+   * @experimental
+   * currently requires `tree` if there are multiple links to traverse
+   * @see tree
+   */
+  itemsPath?: string;
+  /**
    * OADA Tree for the path
    *
    * @see path

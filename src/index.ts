@@ -1,10 +1,11 @@
 import Bluebird from 'bluebird';
 import pointer from 'json-pointer';
+import { JSONPath } from 'jsonpath-plus';
 import debug from 'debug';
 
 import type { TypeAssert } from '@oada/types';
 import type { Resource } from '@oada/types/oada/resource';
-import type { List, Link } from '@oada/types/oada/link/v1';
+import type { Link } from '@oada/types/oada/link/v1';
 import type V2Changes from '@oada/types/oada/change/v2';
 import type { SocketResponse } from '@oada/client/dist/websocket';
 
@@ -71,6 +72,93 @@ function assumeItemState<State extends ItemState>(state: State) {
 }
 
 /**
+ * Type for the lists we can watch
+ */
+export type List = Resource & {
+  [key: string]: Link | List;
+};
+
+declare module 'jsonpath-plus' {
+  interface JSONPathCallable {
+    (
+      options: JSONPathOptions & {
+        resultType: 'path' | 'pointer' | 'parentProperty';
+        wrap?: true;
+      }
+    ): string[];
+    (
+      path: JSONPathOptions['path'],
+      json: JSONPathOptions['json'],
+      callback?: JSONPathOptions['callback'],
+      otherTypeCallback?: JSONPathOptions['otherTypeCallback']
+    ): any[];
+  }
+}
+
+function getListItems(list: List, path: string) {
+  const pointers = JSONPath({
+    resultType: 'pointer',
+    path,
+    json: list,
+    preventEval: true,
+  }).filter(
+    // Don't follow underscore keys
+    (p) => !/\/_/.test(p)
+  );
+
+  return pointers;
+}
+
+/**
+ * OADA Tree
+ *
+ * @internal
+ */
+export type Tree = {
+  _type?: string;
+  _rev?: number;
+} & (
+  | {
+      [key: string]: Tree;
+    }
+  | {}
+);
+
+/**
+ * Generates an equivalent JSON Path from an OADA Tree object
+ *
+ * @internal
+ * @experimental trees with multiple "paths" (excluing *)
+ */
+export function pathFromTree(tree: Tree, root = ''): string {
+  let path = '$.*';
+  let outPath = '$';
+
+  const json = pointer.get(tree, root);
+  while (true) {
+    // Get set of non underscore keys
+    const keys = [
+      ...new Set(
+        JSONPath({
+          resultType: 'parentProperty',
+          path,
+          json,
+        }).filter((k) => !k.startsWith('_'))
+      ),
+    ];
+    if (keys.length === 0) {
+      break;
+    }
+
+    outPath += '.' + (keys.length === 1 ? keys[0] : `[${keys.join(',')}]`);
+
+    path += '.*';
+  }
+
+  return outPath;
+}
+
+/**
  * The main class of this library.
  * Watches an OADA list and calls various callbacks when appropriate.
  *
@@ -83,6 +171,10 @@ export class ListWatch<Item = unknown> {
    * The OADA path of the List being watched
    */
   public readonly path;
+  /**
+   * The JSON Path for the list items
+   */
+  public readonly itemsPath;
   /**
    * The OADA Tree for the List being watched
    * @see path
@@ -129,6 +221,7 @@ export class ListWatch<Item = unknown> {
 
   constructor({
     path,
+    itemsPath,
     tree,
     name,
     resume = false,
@@ -162,6 +255,18 @@ export class ListWatch<Item = unknown> {
     this.#onRemoveItem = onRemoveItem;
     this.#onDeleteList = onDeleteList;
     this.#getItemState = getItemState;
+
+    if (itemsPath) {
+      this.itemsPath = itemsPath;
+    } else {
+      if (tree) {
+        // Asume items are at the leaves of tree
+        this.itemsPath = pathFromTree(tree, path);
+      } else {
+        // Assume flat list
+        this.itemsPath = '$.*';
+      }
+    }
 
     if (onNewList) {
       this.#onNewList = onNewList;
@@ -205,7 +310,8 @@ export class ListWatch<Item = unknown> {
     const conn = this.#conn;
 
     const { data: list } = (await conn.get({ path })) as GetResponse<List>;
-    const items = Object.keys(list).filter((k) => !k.match(/^_/));
+    //const items = Object.keys(list).filter((k) => !k.match(/^_/));
+    const items = getListItems(list, this.itemsPath);
 
     //const { rev } = this.#meta;
     await Bluebird.map(items, async (id) => {
@@ -331,13 +437,14 @@ export class ListWatch<Item = unknown> {
     const conn = this.#conn;
     const rev = list._rev;
     // Ignore _ keys of OADA
-    const items = Object.keys(list).filter((k) => !k.match(/^_/));
+    //const items = Object.keys(list).filter((k) => !k.match(/^_/));
+    const items = getListItems(list as List, this.itemsPath);
 
     switch (type) {
       case 'merge':
         await Bluebird.map(items, async (id) => {
           try {
-            const lchange = list[id] as Partial<Link>;
+            const lchange = pointer.get(list, id) as Partial<Link>;
 
             // If there is an _id this is a new link in the list right?
             if (lchange._id) {
@@ -362,7 +469,7 @@ export class ListWatch<Item = unknown> {
       case 'delete':
         await Bluebird.map(items, async (id) => {
           try {
-            const lchange = list[id];
+            const lchange = pointer.get(list, id);
 
             if (lchange === null) {
               info(`Detected removal of item ${id} from ${path}, rev ${rev}`);
@@ -422,7 +529,7 @@ export class ListWatch<Item = unknown> {
               path: `${path}/${id}`,
             });
             const change: Change = {
-              resource_id: list[id]._id,
+              resource_id: pointer.get(list, id)._id,
               path: '',
               // TODO: what is the type the change??
               type: 'merge',
@@ -468,8 +575,11 @@ export class ListWatch<Item = unknown> {
     // TODO: Clean up control flow to not need this?
     const currentItemsNew = !(await this.#meta.init()) || !this.#resume;
     if (currentItemsNew) {
-      const { data: list } = (await conn.get({ path })) as GetResponse<List>;
-      const items = Object.keys(list).filter((k) => !k.match(/^_/));
+      const { data: list } = (await conn.get({ path, tree })) as GetResponse<
+        List
+      >;
+      //const items = Object.keys(list).filter((k) => !k.match(/^_/));
+      const items = getListItems(list, this.itemsPath);
 
       // ask for states of pre-existing items
       const states = await this.#onNewList(items);
@@ -492,34 +602,45 @@ export class ListWatch<Item = unknown> {
         }
 
         const rev = (body as Change['body'])._rev as string;
-        const [id, ...rest] = pointer.parse(changePath);
 
         trace(`Received change to ${path}, rev ${rev}`);
-        let itemsFound = !!id;
-
+        let itemsFound = !!changePath;
+        let listChange = body as DeepPartial<List>;
         try {
-          // The actual change was to an item in the list (or a descendant)
-          if (id) {
-            // Make change start at item instead of the list
-            const change: Change = {
-              ...ctx,
-              type,
-              path: pointer.compile(rest),
-              body: body as {},
-            };
-
-            await this.handleItemChange(id, change);
-            return;
+          // The actual change was to a descendant of the list
+          if (changePath) {
+            // Reconstruct change to list?
+            const changeObj = {};
+            pointer.set(changeObj, changePath, body);
+            // Find items involved in the change
+            const itemsChanged = JSONPath({
+              path: this.itemsPath,
+              json: changeObj,
+              resultType: 'pointer',
+            });
+            // The change was to items of the list (or their descendants)
+            if (itemsChanged.length >= 1) {
+              return Bluebird.map(itemsChanged, (item) => {
+                // Make change start at item instead of the list
+                const path = changePath.slice(item.length);
+                const change: Change = {
+                  ...ctx,
+                  type,
+                  path,
+                  body: pointer.get(changeObj, item),
+                };
+                return this.handleItemChange(item, change);
+              });
+            } else {
+              // The change is between the list and items (multiple link levels)
+              listChange = changeObj;
+            }
           }
-
           // The change was to the list itself
-          const list = body as DeepPartial<List>;
-          itemsFound = (await this.handleListChange(list, type)) || itemsFound;
+          itemsFound =
+            (await this.handleListChange(listChange, type)) || itemsFound;
         } catch (err: unknown) {
-          error(
-            `Error processing change for ${id} at ${path}, rev ${rev}: %O`,
-            err
-          );
+          error(`Error processing change at ${path}, rev ${rev}: %O`, err);
         } finally {
           // Need this check to prevent infinite loop
           if (itemsFound && this.#resume) {
