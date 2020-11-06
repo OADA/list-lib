@@ -1,3 +1,5 @@
+import { join } from 'path';
+
 import Bluebird from 'bluebird';
 import pointer from 'json-pointer';
 import { JSONPath } from 'jsonpath-plus';
@@ -342,7 +344,7 @@ export class ListWatch<Item = unknown> {
 
     if (!stateCBnoItem(this.#getItemState)) {
       const { data: item } = await this.#conn.get({
-        path: `${this.path}/${id}`,
+        path: join(this.path, id),
       });
       assertItem(item);
       return this.#getItemState(id, item);
@@ -420,7 +422,7 @@ export class ListWatch<Item = unknown> {
         const assertItem: TypeAssert<Item> = this.#assertItem;
 
         const { data: item } = await conn.get({
-          path: `${path}/${id}`,
+          path: join(path, id),
         });
         assertItem(item);
         await this.#onItem(item, id);
@@ -449,7 +451,7 @@ export class ListWatch<Item = unknown> {
             // If there is an _id this is a new link in the list right?
             if (lchange._id) {
               const { data: item } = (await conn.get({
-                path: `${path}/${id}`,
+                path: join(path, id),
               })) as GetResponse<Resource>;
               await this.handleNewItem(rev + '', id, item);
             } else {
@@ -518,7 +520,7 @@ export class ListWatch<Item = unknown> {
         case ItemState.New:
           {
             const { data: item } = (await this.#conn.get({
-              path: `${path}/${id}`,
+              path: join(path, id),
             })) as GetResponse<Resource>;
             await this.handleNewItem(list._rev + '', id, item);
           }
@@ -526,7 +528,7 @@ export class ListWatch<Item = unknown> {
         case ItemState.Modified:
           {
             const { data: item } = await this.#conn.get({
-              path: `${path}/${id}`,
+              path: join(path, id),
             });
             const change: Change = {
               resource_id: pointer.get(list, id)._id,

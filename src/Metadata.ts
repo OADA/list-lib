@@ -1,3 +1,5 @@
+import { join } from 'path';
+
 import assign from 'object-assign-deep';
 
 import { Conn } from './Options';
@@ -96,7 +98,7 @@ export class Metadata {
     this.#updated = false;
 
     this.#conn = conn;
-    this.#path = `${path}/_meta/${Metadata.META_KEY}/${name}`;
+    this.#path = join(path, '_meta', Metadata.META_KEY, name);
 
     // Periodically persist state to _meta
     if (persistInterval) {
@@ -145,7 +147,7 @@ export class Metadata {
     for (const id in this.handled) {
       if (!this.handled[id]) {
         await this.#conn.delete({
-          path: `${this.#path}/${id}`,
+          path: join(this.#path, id),
         });
         delete this.handled[id];
       }

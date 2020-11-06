@@ -12,7 +12,7 @@ import { ListWatch, Tree, pathFromTree } from './';
 
 const name = 'oada-list-lib-test';
 
-const delay = 11;
+const delay = 100;
 
 test('it should create JSON Path from simple OADA tree', (t) => {
   const tree: Tree = {
