@@ -80,6 +80,9 @@ export type List = Resource & {
   [key: string]: Link | List;
 };
 
+/**
+ * @internal
+ */
 declare module 'jsonpath-plus' {
   interface JSONPathCallable {
     (
