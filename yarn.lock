@@ -72,10 +72,10 @@
     "@nodelib/fs.scandir" "2.1.3"
     fastq "^1.6.0"
 
-"@oada/client@^1.0.4":
-  version "1.1.0"
-  resolved "https://registry.yarnpkg.com/@oada/client/-/client-1.1.0.tgz#39d6a51c9265585d78080d89713f4485cf36ec0d"
-  integrity sha512-LaPFuRhwxE+IXKDHNvK9PKTm5wuzV9pw2WtZS+5aGZwVkTrKFrjkDi9nePpgrM5TL9Cv41HaS7G5PMv7TLg9Ww==
+"@oada/client@^1.1.3":
+  version "1.1.4"
+  resolved "https://registry.yarnpkg.com/@oada/client/-/client-1.1.4.tgz#f1ca08983d844544da52ce77301a2e8f1ec00181"
+  integrity sha512-FWwDfksrzZCLDiemjlEtrE8n/PimMwRBYMB3XCgFDsTUZD/6uXT4x+RbOpfoOznI4vu3Ty4Mx5O30fREe6r5bg==
   dependencies:
     "@oada/types" "^1.0.6"
     debug "^4.1.1"
@@ -1199,9 +1199,9 @@ inherits@2:
   integrity sha512-k/vGaX4/Yla3WzyMCvTQOXYeIHvqOKtnqBduzTHpzpQZzAskKMhZ2K+EnBiSM9zGSoIFeMpXKxa4dYeZIQqewQ==
 
 ini@^1.3.5, ini@~1.3.0:
-  version "1.3.5"
-  resolved "https://registry.yarnpkg.com/ini/-/ini-1.3.5.tgz#eee25f56db1c9ec6085e0c22778083f596abf927"
-  integrity sha512-RZY5huIKCMRWDUqZlEi72f/lmXKMvuszcMBduliQ3nnWbx9X/ZBQO7DijMEYS9EhHBb2qacRUMtC7svLwe0lcw==
+  version "1.3.8"
+  resolved "https://registry.yarnpkg.com/ini/-/ini-1.3.8.tgz#a29da425b48806f34767a4efce397269af28432c"
+  integrity sha512-JV/yugV2uzW5iMRSiZAyDtQd+nxtUnjeLt0acNdw98kKLrvuRVyB80tsREOE7yvGVgalhZ6RNXCmEHkUKBKxew==
 
 irregular-plurals@^3.2.0:
   version "3.2.0"
