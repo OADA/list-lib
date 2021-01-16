@@ -100,7 +100,7 @@ declare module 'jsonpath-plus' {
   }
 }
 
-function getListItems(list: List, path: string) {
+function getListItems(list: Partial<List>, path: string) {
   const pointers = JSONPath({
     resultType: 'pointer',
     path,
@@ -608,7 +608,7 @@ export class ListWatch<Item = unknown> {
 
         const rev = (body as Change['body'])._rev as string;
 
-        trace(`Received change to ${path}, rev ${rev}`);
+        trace(`Received change to ${changePath}: %O`, { type, body, ...ctx });
         let itemsFound = !!changePath;
         let listChange = body as DeepPartial<List>;
         try {
@@ -618,22 +618,24 @@ export class ListWatch<Item = unknown> {
             const changeObj = {};
             pointer.set(changeObj, changePath, body);
             // Find items involved in the change
-            const itemsChanged = JSONPath({
-              path: this.itemsPath,
-              json: changeObj,
-              resultType: 'pointer',
-            });
+            const itemsChanged = getListItems(changeObj, this.itemsPath);
             // The change was to items of the list (or their descendants)
             if (itemsChanged.length >= 1) {
               return Bluebird.map(itemsChanged, (item) => {
+                const body = pointer.get(changeObj, item);
                 // Make change start at item instead of the list
                 const path = changePath.slice(item.length);
                 const change: Change = {
                   ...ctx,
                   type,
                   path,
-                  body: pointer.get(changeObj, item),
+                  body,
                 };
+                // Check that it is a resource change?
+                if (!body._rev) {
+                  warn(`Ignoring unexpected change: %O`, change);
+                  return;
+                }
                 return this.handleItemChange(item, change);
               });
             } else {
