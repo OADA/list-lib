@@ -1,8 +1,7 @@
 import sinon from 'sinon';
-import { OADAClient } from '@oada/client';
-import type { SocketResponse } from '@oada/client/dist/websocket';
+import { OADAClient, ConnectionResponse } from '@oada/client';
 
-const emptyResp: SocketResponse = {
+const emptyResp: ConnectionResponse = {
   requestId: 'testid',
   status: 200,
   statusText: 'OK',

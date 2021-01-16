@@ -9,7 +9,7 @@ import type { TypeAssert } from '@oada/types';
 import type { Resource } from '@oada/types/oada/resource';
 import type { Link } from '@oada/types/oada/link/v1';
 import type V2Changes from '@oada/types/oada/change/v2';
-import type { SocketResponse } from '@oada/client/dist/websocket';
+import type { ConnectionResponse } from '@oada/client';
 
 import { Options, ItemState } from './Options';
 import { Metadata } from './Metadata';
@@ -34,7 +34,7 @@ export { Options, ItemState };
 /**
  * @internal
  */
-export type GetResponse<T = unknown> = SocketResponse & {
+export type GetResponse<T = unknown> = ConnectionResponse & {
   data: T;
 };
 
@@ -516,7 +516,7 @@ export class ListWatch<Item = unknown> {
     const { rev } = this.#meta;
 
     const _ids = Array.isArray(ids) ? ids : [ids];
-    const _states = Array.isArray(states) ? states : [states];
+    const _states = (Array.isArray(states) ? states : [states]) as ItemState[];
     await Bluebird.map(_ids, async (id, i) => {
       const state = _states[i];
       switch (state) {
@@ -580,9 +580,10 @@ export class ListWatch<Item = unknown> {
     // TODO: Clean up control flow to not need this?
     const currentItemsNew = !(await this.#meta.init()) || !this.#resume;
     if (currentItemsNew) {
-      const { data: list } = (await conn.get({ path, tree })) as GetResponse<
-        List
-      >;
+      const { data: list } = (await conn.get({
+        path,
+        tree,
+      })) as GetResponse<List>;
       //const items = Object.keys(list).filter((k) => !k.match(/^_/));
       const items = getListItems(list, this.itemsPath);
 
