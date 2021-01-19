@@ -599,6 +599,9 @@ export class ListWatch<Item = unknown> {
 
     // Setup watch on the path
     const { rev } = this.#meta;
+    if (this.#resume) {
+      trace(`Resuming watch from rev ${rev}`);
+    }
     this.#id = await conn.watch({
       path,
       rev: this.#resume ? this.#meta.rev : rev,
@@ -614,6 +617,13 @@ export class ListWatch<Item = unknown> {
         const rev = (body as Change['body'])._rev as string;
 
         trace(`Received change to ${changePath}: %O`, { type, body, ...ctx });
+
+
+        if (!changePath && this.#resume) {
+          trace(`Received change to root of list, updating handled rev in our _meta records`);
+          this.#meta!.rev = rev;
+        }
+
         let itemsFound = !!changePath;
         let listChange = body as DeepPartial<List>;
         try {
@@ -673,12 +683,6 @@ export class ListWatch<Item = unknown> {
             (await this.handleListChange(listChange, type)) || itemsFound;
         } catch (err: unknown) {
           error(`Error processing change at ${path}, rev ${rev}: %O`, err);
-        } finally {
-          // Need this check to prevent infinite loop
-          if (itemsFound && this.#resume) {
-            // Only update last processed rev if we actually processed items
-            this.#meta!.rev = rev;
-          }
         }
       },
     });

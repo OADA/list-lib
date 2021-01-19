@@ -5,6 +5,10 @@ import assign from 'object-assign-deep';
 import { Conn } from './Options';
 import { GetResponse } from '.';
 
+import debug from 'debug';
+const trace = debug('oada-list-lib#metadata:trace');
+
+
 /**
  * Record of successfully handled list item(s)
  *
@@ -60,6 +64,7 @@ export class Metadata {
     return this.#rev;
   }
   set rev(rev) {
+    trace(`Updating local rev to ${rev}`);
     this.#rev = rev;
     this.#updated = true;
   }
@@ -141,6 +146,7 @@ export class Metadata {
       // Avoid PUTing to _meta needlessly
       return;
     }
+    trace(`Persisting _meta to OADA`);
 
     // Removing keys in OADA is annoying
     // TODO: Is it better to just DELETE the whole thing and then put?
