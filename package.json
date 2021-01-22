@@ -39,6 +39,8 @@
     }
   },
   "devDependencies": {
+    "@types/bluebird": "^3.5.32",
+    "@types/debug": "^4.1.5",
     "@ava/typescript": "^1.1.1",
     "@types/json-pointer": "^1.0.30",
     "@types/node": "^14.14.22",
@@ -52,13 +54,10 @@
   "dependencies": {
     "@oada/client": "^2.2.1",
     "@oada/types": "^1.2.0",
-    "@types/bluebird": "^3.5.32",
-    "@types/debug": "^4.1.5",
     "bluebird": "^3.7.2",
     "debug": "^4.3.1",
     "json-pointer": "^0.6.0",
     "jsonpath-plus": "^5.0.2",
-    "jsonschema8": "^1.1.0",
     "object-assign-deep": "^0.4.0"
   }
 }
