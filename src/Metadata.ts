@@ -90,7 +90,8 @@ export class Metadata {
   async setHandled(path: string, item: Item | undefined) {
     if (item) {
       // Merge with current info
-      const old = pointer.get(this.#handled, path);
+      const old =
+        pointer.has(this.#handled, path) && pointer.get(this.#handled, path);
       await this.#conn.put({
         path: `${this.#path}/handled/${path}`,
         data: item,
@@ -110,7 +111,7 @@ export class Metadata {
    * @param path JSON pointer of list item
    */
   handled(path: string): Item | undefined {
-    return pointer.get(this.#handled, path);
+    return pointer.has(this.#handled, path) && pointer.get(this.#handled, path);
   }
 
   toJSON(): object {

@@ -94,10 +94,8 @@ test('should persist rev to _meta', async (t) => {
 
   t.assert(
     conn.put.calledWithMatch({
-      path: `${path}/_meta/oada-list-lib/${name}`,
-      data: {
-        rev: '4',
-      },
+      path: `${path}/_meta/oada-list-lib/${name}/rev`,
+      data: '4',
     } as PUTRequest)
   );
 });
