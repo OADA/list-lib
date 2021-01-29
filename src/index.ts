@@ -231,7 +231,6 @@ export class ListWatch<Item = unknown> {
     name,
     resume = false,
     conn,
-    persistInterval = 1000,
     // If no assert given, assume all items valid
     assertItem = () => {},
     onAddItem,
@@ -290,9 +289,10 @@ export class ListWatch<Item = unknown> {
 
     this.#meta = new Metadata({
       // Don't persist metdata if service does not "resume"
-      persistInterval: this.#resume ? persistInterval : 0,
+      //persistInterval: this.#resume ? persistInterval : 0,
       conn: this.#conn,
       path,
+      tree,
       name,
     });
     this.initialize().catch(error);
@@ -321,7 +321,7 @@ export class ListWatch<Item = unknown> {
     //const { rev } = this.#meta;
     await Bluebird.map(items, async (id) => {
       try {
-        if (!all && this.#meta.handled[id]) {
+        if (!all && this.#meta.handled(id)) {
           // We think this item is handled
           return;
         }
@@ -362,7 +362,7 @@ export class ListWatch<Item = unknown> {
   public async stop() {
     await this.#conn.unwatch(this.#id!);
     await this.persistMeta();
-    this.#meta.stop();
+    //this.#meta.stop();
   }
 
   /**
@@ -370,7 +370,7 @@ export class ListWatch<Item = unknown> {
    * This preserves it across restarts.
    */
   public async persistMeta() {
-    await this.#meta.persist();
+    //await this.#meta.persist();
   }
 
   private async handleNewItem(rev: string, id: string, item: Resource) {
@@ -384,11 +384,9 @@ export class ListWatch<Item = unknown> {
 
     try {
       // Double check this is a new item?
-      if (!this.#meta.handled[id]?.onAddItem) {
+      if (!this.#meta.handled(id)?.onAddItem) {
         await (this.#onAddItem && this.#onAddItem(item, id));
-        this.#meta.handled = {
-          [id]: { onAddItem: { rev: _rev + '' } },
-        };
+        this.#meta.setHandled(id, { onAddItem: { rev: _rev + '' } });
       }
     } finally {
       // Call this even if previous callback errored
@@ -397,10 +395,10 @@ export class ListWatch<Item = unknown> {
       // or will the feed have one??
 
       // Double check this item is actually newer than last time
-      if (+_rev > +(this.#meta.handled[id]?.onItem?.rev ?? 0)) {
+      if (+_rev > +(this.#meta.handled(id)?.onItem?.rev ?? 0)) {
         // TODO: Why doesn't this.#onItem?.() work?
         await (this.#onItem && this.#onItem(item, id));
-        this.#meta.handled = { [id]: { onItem: { rev: _rev + '' } } };
+        this.#meta.setHandled(id, { onItem: { rev: _rev + '' } });
       }
     }
   }
@@ -416,9 +414,7 @@ export class ListWatch<Item = unknown> {
     const { _rev } = change;
     try {
       await (this.#onChangeItem && this.#onChangeItem(change, id));
-      this.#meta.handled = {
-        [id]: { onChangeItem: { rev: _rev + '' } },
-      };
+      this.#meta.setHandled(id, { onChangeItem: { rev: _rev + '' } });
     } finally {
       if (this.#onItem) {
         // Needed because TS is weird about asserts...
@@ -429,7 +425,7 @@ export class ListWatch<Item = unknown> {
         });
         assertItem(item);
         await this.#onItem(item, id);
-        this.#meta.handled = { [id]: { onItem: { rev: _rev + '' } } };
+        this.#meta.setHandled(id, { onItem: { rev: _rev + '' } });
       }
     }
   }
@@ -456,7 +452,9 @@ export class ListWatch<Item = unknown> {
 
             // If there is an _id this is a new link in the list right?
             if (lchange._id) {
-              trace('handleListChange: lchange has an _id, getting it and handing to handleNewItem');
+              trace(
+                'handleListChange: lchange has an _id, getting it and handing to handleNewItem'
+              );
               const { data: item } = (await conn.get({
                 path: join(path, id),
               })) as GetResponse<Resource>;
@@ -486,7 +484,7 @@ export class ListWatch<Item = unknown> {
                 await (this.#onRemoveItem && this.#onRemoveItem(id));
               } finally {
                 // Mark for delete?
-                this.#meta.handled = { [id]: undefined };
+                this.#meta.setHandled(id, undefined);
               }
             } else {
               // TODO: What does this mean??
@@ -550,9 +548,7 @@ export class ListWatch<Item = unknown> {
         case ItemState.Handled:
           info(`Recoding item ${id} as handled for ${path}`);
           // Mark handled for all callbacks?
-          this.#meta.handled = {
-            [id]: { onAddItem: { rev }, onItem: { rev } },
-          };
+          this.#meta.setHandled(id, { onAddItem: { rev }, onItem: { rev } });
           break;
         default:
           assertNever(state);
@@ -618,9 +614,10 @@ export class ListWatch<Item = unknown> {
 
         trace(`Received change to ${changePath}: %O`, { type, body, ...ctx });
 
-
         if (!changePath && this.#resume) {
-          trace(`Received change to root of list, updating handled rev in our _meta records`);
+          trace(
+            `Received change to root of list, updating handled rev in our _meta records`
+          );
           this.#meta!.rev = rev;
         }
 
@@ -643,13 +640,16 @@ export class ListWatch<Item = unknown> {
                 json: changeObj,
                 preventEval: true,
               });
-              if (pathmatches && pathmatches.length === 0) { // if it does not match, this must be above the items
+              if (pathmatches && pathmatches.length === 0) {
+                // if it does not match, this must be above the items
                 isListChange = true;
-                trace('Have a write to the list under itemsPath rather than to any of the items');
+                trace(
+                  'Have a write to the list under itemsPath rather than to any of the items'
+                );
               }
             }
 
-            // now put the actual change body in place of the true 
+            // now put the actual change body in place of the true
             pointer.set(changeObj, changePath, body);
             // Find items involved in the change
             const itemsChanged = getListItems(changeObj, this.itemsPath);
@@ -667,7 +667,10 @@ export class ListWatch<Item = unknown> {
                 };
                 // Check that it is a resource change?
                 if (!body._rev) {
-                  warn(`Ignoring unexpected (as in the body does not have a _rev) change: %O`, change);
+                  warn(
+                    `Ignoring unexpected (as in the body does not have a _rev) change: %O`,
+                    change
+                  );
                   return;
                 }
                 return this.handleItemChange(item, change);
@@ -677,7 +680,9 @@ export class ListWatch<Item = unknown> {
               listChange = changeObj;
             }
           }
-          trace(`Change was to the list itself because changePath is empty, calling handleListChange`);
+          trace(
+            `Change was to the list itself because changePath is empty, calling handleListChange`
+          );
           // The change was to the list itself
           itemsFound =
             (await this.handleListChange(listChange, type)) || itemsFound;

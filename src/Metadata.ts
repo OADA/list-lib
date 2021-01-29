@@ -1,6 +1,7 @@
 import { join } from 'path';
 
 import assign from 'object-assign-deep';
+import pointer from 'json-pointer';
 
 import { Conn } from './Options';
 import { GetResponse } from '.';
@@ -8,27 +9,39 @@ import { GetResponse } from '.';
 import debug from 'debug';
 const trace = debug('oada-list-lib#metadata:trace');
 
+/**
+ * Record of a successfully handled list item
+ *
+ * @internal
+ */
+export interface Item {
+  /**
+   * The callback which ran on item
+   */
+  [callback: string]: {
+    rev: string;
+  };
+}
 
 /**
- * Record of successfully handled list item(s)
+ * Record of successfully handled list items
  *
  * @internal
  */
 export type Items = {
   /**
-   * The list item which ran
+   * The list item(s) which ran
+   *
+   * Items can be nested
    */
-  [item: string]:
-    | undefined
-    | {
-        /**
-         * The callback which ran on item
-         */
-        [callback: string]: {
-          rev: string;
-        };
-      };
+  [key: string]: undefined | Item | Items;
 };
+
+function moveTree(tree: object, oldRoot: string, newRoot: string): object {
+  const out = {};
+  pointer.set(out, newRoot, pointer.get(tree, oldRoot));
+  return out;
+}
 
 /**
  * Persistent data we store in the _meta of the list
@@ -50,15 +63,10 @@ export class Metadata {
    */
   #handled: Items = {};
 
-  #interval?;
-  /**
-   * Flag to track whenever any state gets set
-   */
-  #updated: boolean;
-
   // Where to store state
   #conn;
   #path;
+  #tree;
 
   get rev(): string {
     return this.#rev;
@@ -66,17 +74,43 @@ export class Metadata {
   set rev(rev) {
     trace(`Updating local rev to ${rev}`);
     this.#rev = rev;
-    this.#updated = true;
+    //this.#updated = true;
+    this.#conn.put({
+      path: `${this.#path}/rev`,
+      data: rev,
+    });
   }
 
-  // TODO: IDK about this...
-  set handled(items) {
-    assign(this.#handled, items);
-    this.#updated = true;
+  /**
+   * Set handled info of a list item
+   *
+   * @param path JSON pointer of list item
+   * @param item Item info to set
+   */
+  async setHandled(path: string, item: Item | undefined) {
+    if (item) {
+      // Merge with current info
+      const old = pointer.get(this.#handled, path);
+      await this.#conn.put({
+        path: `${this.#path}/handled/${path}`,
+        data: item,
+      });
+      pointer.set(this.#handled, path, assign(old, item));
+    } else {
+      // Unset info?
+      await this.#conn.delete({ path: `${this.#path}/handled/${path}` });
+      pointer.set(this.#handled, path, undefined);
+    }
+    //this.#updated = true;
   }
 
-  get handled() {
-    return this.#handled;
+  /**
+   * Get handled info of a list item
+   *
+   * @param path JSON pointer of list item
+   */
+  handled(path: string): Item | undefined {
+    return pointer.get(this.#handled, path);
   }
 
   toJSON(): object {
@@ -89,26 +123,24 @@ export class Metadata {
   constructor({
     conn,
     path,
+    tree,
     name,
-    persistInterval,
   }: {
     /**
      * The path to the resource with which to associate this metadata
      */
     path: string;
+    /**
+     * Optional OADA tree corresponding to `path`
+     */
+    tree: object | undefined;
     name: string;
     conn: Conn;
-    persistInterval: number;
   }) {
-    this.#updated = false;
-
     this.#conn = conn;
     this.#path = join(path, '_meta', Metadata.META_KEY, name);
-
-    // Periodically persist state to _meta
-    if (persistInterval) {
-      this.#interval = setInterval(() => this.persist(), persistInterval);
-    }
+    // Replicate list tree under handled key?
+    this.#tree = tree && moveTree(tree, join(path, 'handled'), this.#path);
   }
 
   /**
@@ -132,44 +164,12 @@ export class Metadata {
         data: this as {},
       });
       const id = headers['content-location'].replace(/^\//, '');
-      await this.#conn.put({ path: this.#path, data: { _id: id } });
+      await this.#conn.put({
+        path: this.#path,
+        tree: this.#tree,
+        data: { _id: id },
+      });
       return false;
     }
-  }
-
-  /**
-   * Persist relevant info to the _meta of the list.
-   * This preserves it across restarts.
-   */
-  public async persist() {
-    if (!this.#updated || !this.#interval) {
-      // Avoid PUTing to _meta needlessly
-      return;
-    }
-    trace(`Persisting _meta to OADA`);
-
-    // Removing keys in OADA is annoying
-    // TODO: Is it better to just DELETE the whole thing and then put?
-    for (const id in this.handled) {
-      if (!this.handled[id]) {
-        await this.#conn.delete({
-          path: join(this.#path, id),
-        });
-        delete this.handled[id];
-      }
-    }
-    await this.#conn.put({
-      path: this.#path,
-      data: this as {},
-    });
-
-    this.#updated = false;
-  }
-
-  /**
-   * Stop the interval to check for changes to meta
-   */
-  public stop() {
-    this.#interval && clearInterval(this.#interval);
   }
 }
