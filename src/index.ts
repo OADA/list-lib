@@ -384,7 +384,7 @@ export class ListWatch<Item = unknown> {
 
     try {
       // Double check this is a new item?
-      if (!this.#meta.handled(id)?.onAddItem) {
+      if (!(await this.#meta.handled(id))?.onAddItem) {
         await (this.#onAddItem && this.#onAddItem(item, id));
         this.#meta.setHandled(id, { onAddItem: { rev: _rev + '' } });
       }
@@ -395,7 +395,7 @@ export class ListWatch<Item = unknown> {
       // or will the feed have one??
 
       // Double check this item is actually newer than last time
-      if (+_rev > +(this.#meta.handled(id)?.onItem?.rev ?? 0)) {
+      if (+_rev > +((await this.#meta.handled(id))?.onItem?.rev ?? 0)) {
         // TODO: Why doesn't this.#onItem?.() work?
         await (this.#onItem && this.#onItem(item, id));
         this.#meta.setHandled(id, { onItem: { rev: _rev + '' } });

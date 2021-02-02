@@ -1,10 +1,9 @@
 import { join } from 'path';
 
-import assign from 'object-assign-deep';
+import clone from 'clone-deep';
 import pointer from 'json-pointer';
 
 import { Conn } from './Options';
-import { GetResponse } from '.';
 
 import debug from 'debug';
 const trace = debug('oada-list-lib#metadata:trace');
@@ -37,12 +36,6 @@ export type Items = {
   [key: string]: undefined | Item | Items;
 };
 
-function moveTree(tree: object, oldRoot: string, newRoot: string): object {
-  const out = {};
-  pointer.set(out, newRoot, pointer.get(tree, oldRoot));
-  return out;
-}
-
 /**
  * Persistent data we store in the _meta of the list
  *
@@ -58,15 +51,11 @@ export class Metadata {
    * The rev we left off on
    */
   #rev = '0';
-  /**
-   * Track "error" items
-   */
-  #handled: Items = {};
 
   // Where to store state
   #conn;
   #path;
-  #tree;
+  #tree?: object;
 
   get rev(): string {
     return this.#rev;
@@ -76,8 +65,9 @@ export class Metadata {
     this.#rev = rev;
     //this.#updated = true;
     this.#conn.put({
-      path: `${this.#path}/rev`,
-      data: rev,
+      path: this.#path,
+      tree: this.#tree,
+      data: { rev },
     });
   }
 
@@ -90,17 +80,14 @@ export class Metadata {
   async setHandled(path: string, item: Item | undefined) {
     if (item) {
       // Merge with current info
-      const old =
-        pointer.has(this.#handled, path) && pointer.get(this.#handled, path);
       await this.#conn.put({
-        path: `${this.#path}/handled/${path}`,
+        path: join(this.#path, 'handled', path),
+        tree: this.#tree,
         data: item,
       });
-      pointer.set(this.#handled, path, assign(old, item));
     } else {
       // Unset info?
-      await this.#conn.delete({ path: `${this.#path}/handled/${path}` });
-      pointer.set(this.#handled, path, undefined);
+      await this.#conn.delete({ path: join(this.#path, 'handled', 'path') });
     }
     //this.#updated = true;
   }
@@ -110,8 +97,15 @@ export class Metadata {
    *
    * @param path JSON pointer of list item
    */
-  handled(path: string): Item | undefined {
-    return pointer.has(this.#handled, path) && pointer.get(this.#handled, path);
+  async handled(path: string): Promise<Item | undefined> {
+    try {
+      const { data } = await this.#conn.get({
+        path: join(this.#path, 'handled', path),
+      });
+      return data as Item;
+    } catch {
+      return undefined;
+    }
   }
 
   toJSON(): object {
@@ -140,8 +134,15 @@ export class Metadata {
   }) {
     this.#conn = conn;
     this.#path = join(path, '_meta', Metadata.META_KEY, name);
-    // Replicate list tree under handled key?
-    this.#tree = tree && moveTree(tree, join(path, 'handled'), this.#path);
+    this.#tree = clone(tree);
+    if (this.#tree) {
+      // Replicate list tree under handled key?
+      const listTree = clone(pointer.get(this.#tree, path));
+      pointer.set(this.#tree, this.#path, {
+        _type: 'application/json',
+        handled: listTree,
+      });
+    }
   }
 
   /**
@@ -153,23 +154,13 @@ export class Metadata {
   public async init(): Promise<boolean> {
     // Try to get our metadata about this list
     try {
-      const { data } = (await this.#conn.get({
+      await this.#conn.head({
         path: this.#path,
-      })) as GetResponse<Metadata>;
-      Object.assign(this, data);
+      });
       return true;
     } catch (err: unknown) {
-      // Create our metadata
-      const { headers } = await this.#conn.post({
-        path: '/resources/',
-        data: this as {},
-      });
-      const id = headers['content-location'].replace(/^\//, '');
-      await this.#conn.put({
-        path: this.#path,
-        tree: this.#tree,
-        data: { _id: id },
-      });
+      // Create our metadata?
+      await this.#conn.put({ path: this.#path, tree: this.#tree, data: {} });
       return false;
     }
   }
