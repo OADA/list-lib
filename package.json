@@ -60,6 +60,7 @@
     "clone-deep": "^4.0.1",
     "debug": "^4.3.1",
     "json-pointer": "^0.6.0",
-    "jsonpath-plus": "^5.0.2"
+    "jsonpath-plus": "^5.0.2",
+    "p-queue": "^6.6.2"
   }
 }
