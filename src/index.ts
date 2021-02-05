@@ -411,7 +411,7 @@ export class ListWatch<Item = unknown> {
     // TODO: How best to handle change to a descendant of an item?
     info(`Detected change to item ${id} in ${path}, rev ${rev}`);
 
-    const { _rev } = change;
+    const { _rev } = change.body;
     try {
       await (this.#onChangeItem && this.#onChangeItem(change, id));
       await this.#meta.setHandled(id, { onChangeItem: { rev: _rev + '' } });
