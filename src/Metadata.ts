@@ -56,6 +56,8 @@ export class Metadata {
   #conn;
   #path;
   #tree?: object;
+  #timeout;
+  #wait: Promise<unknown>;
 
   get rev(): string {
     return this.#rev;
@@ -63,12 +65,7 @@ export class Metadata {
   set rev(rev) {
     trace(`Updating local rev to ${rev}`);
     this.#rev = rev;
-    //this.#updated = true;
-    this.#conn.put({
-      path: this.#path,
-      tree: this.#tree,
-      data: { rev },
-    });
+    this.#timeout.refresh();
   }
 
   /**
@@ -87,7 +84,7 @@ export class Metadata {
       });
     } else {
       // Unset info?
-      await this.#conn.delete({ path: join(this.#path, 'handled', 'path') });
+      await this.#conn.delete({ path: join(this.#path, 'handled', path) });
     }
     //this.#updated = true;
   }
@@ -106,13 +103,6 @@ export class Metadata {
     } catch {
       return undefined;
     }
-  }
-
-  toJSON(): object {
-    return {
-      rev: this.rev,
-      handled: this.handled,
-    };
   }
 
   constructor({
@@ -143,6 +133,17 @@ export class Metadata {
         handled: listTree,
       });
     }
+    this.#wait = Promise.resolve();
+    // TODO: Use timeouts for all updates?
+    this.#timeout = setTimeout(async () => {
+      await this.#wait;
+      this.#wait = this.#conn.put({
+        path: this.#path,
+        // TODO: Figure out why tree here causes If-Match error?
+        //tree: this.#tree,
+        data: { rev: this.#rev },
+      });
+    }, 100);
   }
 
   /**

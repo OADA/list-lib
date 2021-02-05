@@ -386,7 +386,7 @@ export class ListWatch<Item = unknown> {
       // Double check this is a new item?
       if (!(await this.#meta.handled(id))?.onAddItem) {
         await (this.#onAddItem && this.#onAddItem(item, id));
-        this.#meta.setHandled(id, { onAddItem: { rev: _rev + '' } });
+        await this.#meta.setHandled(id, { onAddItem: { rev: _rev + '' } });
       }
     } finally {
       // Call this even if previous callback errored
@@ -398,7 +398,7 @@ export class ListWatch<Item = unknown> {
       if (+_rev > +((await this.#meta.handled(id))?.onItem?.rev ?? 0)) {
         // TODO: Why doesn't this.#onItem?.() work?
         await (this.#onItem && this.#onItem(item, id));
-        this.#meta.setHandled(id, { onItem: { rev: _rev + '' } });
+        await this.#meta.setHandled(id, { onItem: { rev: _rev + '' } });
       }
     }
   }
@@ -414,7 +414,7 @@ export class ListWatch<Item = unknown> {
     const { _rev } = change;
     try {
       await (this.#onChangeItem && this.#onChangeItem(change, id));
-      this.#meta.setHandled(id, { onChangeItem: { rev: _rev + '' } });
+      await this.#meta.setHandled(id, { onChangeItem: { rev: _rev + '' } });
     } finally {
       if (this.#onItem) {
         // Needed because TS is weird about asserts...
@@ -425,7 +425,7 @@ export class ListWatch<Item = unknown> {
         });
         assertItem(item);
         await this.#onItem(item, id);
-        this.#meta.setHandled(id, { onItem: { rev: _rev + '' } });
+        await this.#meta.setHandled(id, { onItem: { rev: _rev + '' } });
       }
     }
   }
@@ -484,7 +484,7 @@ export class ListWatch<Item = unknown> {
                 await (this.#onRemoveItem && this.#onRemoveItem(id));
               } finally {
                 // Mark for delete?
-                this.#meta.setHandled(id, undefined);
+                await this.#meta.setHandled(id, undefined);
               }
             } else {
               // TODO: What does this mean??
@@ -548,7 +548,10 @@ export class ListWatch<Item = unknown> {
         case ItemState.Handled:
           info(`Recoding item ${id} as handled for ${path}`);
           // Mark handled for all callbacks?
-          this.#meta.setHandled(id, { onAddItem: { rev }, onItem: { rev } });
+          await this.#meta.setHandled(id, {
+            onAddItem: { rev },
+            onItem: { rev },
+          });
           break;
         default:
           assertNever(state);

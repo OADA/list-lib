@@ -58,7 +58,7 @@
     "@nodelib/fs.scandir" "2.1.4"
     fastq "^1.6.0"
 
-"@oada/client@^2.2.1":
+"@oada/client@^2.3.0":
   version "2.3.0"
   resolved "https://registry.yarnpkg.com/@oada/client/-/client-2.3.0.tgz#64c274ea9efe943a198c29f45d47c374497c8097"
   integrity sha512-lTgp8u4bhn4uKroyaPAy7s8WDXOowpBLCojJFg4cbjsIMw/aUkdPBkPSsmqlbSVrubrmGpIBHXwDwy6+EvizwQ==
