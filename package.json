@@ -54,7 +54,7 @@
     "typescript": "^4.2.0-beta"
   },
   "dependencies": {
-    "@oada/client": "^2.2.1",
+    "@oada/client": "^2.3.0",
     "@oada/types": "^1.2.0",
     "bluebird": "^3.7.2",
     "clone-deep": "^4.0.1",

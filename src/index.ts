@@ -601,93 +601,108 @@ export class ListWatch<Item = unknown> {
     this.#id = await conn.watch({
       path,
       rev: this.#resume ? this.#meta.rev : rev,
-      watchCallback: async ({ type, path: changePath, body, ...ctx }) => {
-        if (body === null && type === 'delete' && changePath === '') {
-          // The list itself was deleted
-          warn(`Detected delete of list ${path}`);
+      type: 'tree',
+      watchCallback: async (changes) => {
+        // Get root change?
+        const rootChange = changes[0];
 
-          await this.#onDeleteList();
-          return;
-        }
+        // TODO: Better way than just looping through them all?
+        await Bluebird.each(
+          changes,
+          async ({ type, path: changePath, body, ...ctx }) => {
+            if (body === null && type === 'delete' && changePath === '') {
+              // The list itself was deleted
+              warn(`Detected delete of list ${path}`);
 
-        const rev = (body as Change['body'])._rev as string;
+              await this.#onDeleteList();
+              return;
+            }
 
-        trace(`Received change to ${changePath}: %O`, { type, body, ...ctx });
+            const rev = (body as Change['body'])._rev as string;
 
-        if (!changePath && this.#resume) {
+            trace(`Received change to ${changePath}: %O`, {
+              type,
+              body,
+              ...ctx,
+            });
+
+            let itemsFound = !!changePath;
+            let listChange = body as DeepPartial<List>;
+            try {
+              // The actual change was to a descendant of the list
+              if (changePath) {
+                // In order to decide if this change was to the list or to an item, need to check if itemsPath
+                // matches the changePath: if it does, it is to an item.  If it doesn't, it's probably to the list.
+
+                // Reconstruct change to list?
+                const changeObj = {};
+                let isListChange = false;
+                if (this.itemsPath) {
+                  pointer.set(changeObj, changePath, true); // just put true here for now to check if path matches
+                  const pathmatches = JSONPath({
+                    resultType: 'pointer',
+                    path: this.itemsPath,
+                    json: changeObj,
+                    preventEval: true,
+                  });
+                  if (pathmatches && pathmatches.length === 0) {
+                    // if it does not match, this must be above the items
+                    isListChange = true;
+                    trace(
+                      'Have a write to the list under itemsPath rather than to any of the items'
+                    );
+                  }
+                }
+
+                // now put the actual change body in place of the true
+                pointer.set(changeObj, changePath, body);
+                // Find items involved in the change
+                const itemsChanged = getListItems(changeObj, this.itemsPath);
+                // The change was to items of the list (or their descendants)
+                if (!isListChange && itemsChanged.length >= 1) {
+                  return Bluebird.map(itemsChanged, (item) => {
+                    const body = pointer.get(changeObj, item);
+                    // Make change start at item instead of the list
+                    const path = changePath.slice(item.length);
+                    const change: Change = {
+                      ...ctx,
+                      type,
+                      path,
+                      body,
+                    };
+                    // Check that it is a resource change?
+                    if (!body._rev) {
+                      warn(
+                        `Ignoring unexpected (as in the body does not have a _rev) change: %O`,
+                        change
+                      );
+                      return;
+                    }
+                    return this.handleItemChange(item, change);
+                  });
+                } else {
+                  // The change is between the list and items
+                  // (multiple link levels)
+                  listChange = changeObj;
+                }
+              }
+              trace(
+                `Change was to the list itself because changePath is empty, calling handleListChange`
+              );
+              // The change was to the list itself
+              itemsFound =
+                (await this.handleListChange(listChange, type)) || itemsFound;
+            } catch (err: unknown) {
+              error(`Error processing change at ${path}, rev ${rev}: %O`, err);
+            }
+          }
+        );
+
+        if (this.#resume) {
           trace(
             `Received change to root of list, updating handled rev in our _meta records`
           );
-          this.#meta!.rev = rev;
-        }
-
-        let itemsFound = !!changePath;
-        let listChange = body as DeepPartial<List>;
-        try {
-          // The actual change was to a descendant of the list
-          if (changePath) {
-            // In order to decide if this change was to the list or to an item, need to check if itemsPath
-            // matches the changePath: if it does, it is to an item.  If it doesn't, it's probably to the list.
-
-            // Reconstruct change to list?
-            const changeObj = {};
-            let isListChange = false;
-            if (this.itemsPath) {
-              pointer.set(changeObj, changePath, true); // just put true here for now to check if path matches
-              const pathmatches = JSONPath({
-                resultType: 'pointer',
-                path: this.itemsPath,
-                json: changeObj,
-                preventEval: true,
-              });
-              if (pathmatches && pathmatches.length === 0) {
-                // if it does not match, this must be above the items
-                isListChange = true;
-                trace(
-                  'Have a write to the list under itemsPath rather than to any of the items'
-                );
-              }
-            }
-
-            // now put the actual change body in place of the true
-            pointer.set(changeObj, changePath, body);
-            // Find items involved in the change
-            const itemsChanged = getListItems(changeObj, this.itemsPath);
-            // The change was to items of the list (or their descendants)
-            if (!isListChange && itemsChanged.length >= 1) {
-              return Bluebird.map(itemsChanged, (item) => {
-                const body = pointer.get(changeObj, item);
-                // Make change start at item instead of the list
-                const path = changePath.slice(item.length);
-                const change: Change = {
-                  ...ctx,
-                  type,
-                  path,
-                  body,
-                };
-                // Check that it is a resource change?
-                if (!body._rev) {
-                  warn(
-                    `Ignoring unexpected (as in the body does not have a _rev) change: %O`,
-                    change
-                  );
-                  return;
-                }
-                return this.handleItemChange(item, change);
-              });
-            } else {
-              // The change is between the list and items (multiple link levels)
-              listChange = changeObj;
-            }
-          }
-          trace(
-            `Change was to the list itself because changePath is empty, calling handleListChange`
-          );
-          // The change was to the list itself
-          itemsFound =
-            (await this.handleListChange(listChange, type)) || itemsFound;
-        } catch (err: unknown) {
-          error(`Error processing change at ${path}, rev ${rev}: %O`, err);
+          this.#meta!.rev = (rootChange.body as Resource)?._rev + '';
         }
       },
     });
