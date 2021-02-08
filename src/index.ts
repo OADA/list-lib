@@ -462,7 +462,7 @@ export class ListWatch<Item = unknown> {
               await this.handleNewItem(rev + '', id, item);
             } else {
               // TODO: What should we do now??
-              warn(`Ignoring non-link key added to list ${path}, rev ${rev}`);
+              trace(`Ignoring non-link key added to list ${path}, rev ${rev}`);
             }
           } catch (err: unknown) {
             // Log error with this item but continue map over other items
@@ -489,7 +489,7 @@ export class ListWatch<Item = unknown> {
               }
             } else {
               // TODO: What does this mean??
-              warn(`Ignoring non-link key added to list ${path}, rev ${rev}`);
+              trace(`Ignoring non-link key added to list ${path}, rev ${rev}`);
             }
           } catch (err: unknown) {
             // Log error with this item but continue map over other items
