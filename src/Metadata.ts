@@ -155,9 +155,10 @@ export class Metadata {
   public async init(): Promise<boolean> {
     // Try to get our metadata about this list
     try {
-      await this.#conn.head({
-        path: this.#path,
+      const { data: rev } = await this.#conn.get({
+        path: join(this.#path, 'rev'),
       });
+      this.#rev = rev as string;
       return true;
     } catch (err: unknown) {
       // Create our metadata?
