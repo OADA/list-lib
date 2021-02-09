@@ -21,7 +21,7 @@ test('should resume from last rev', async (t) => {
   const rev = '766';
 
   // @ts-ignore
-  conn.get.resolves({ data: { rev } });
+  conn.get.resolves({ data: rev });
 
   const opts = {
     path,
@@ -86,16 +86,16 @@ test('should persist rev to _meta', async (t) => {
   await Bluebird.delay(5);
 
   const cb = conn.watch.firstCall?.args?.[0]?.watchCallback as (
-    change: Change
+    change: readonly Change[]
   ) => Promise<void>;
-  await Bluebird.map(change, (c) => cb?.(c));
+  await cb(change);
 
   await Bluebird.delay(100);
 
   t.assert(
     conn.put.calledWithMatch({
-      path: `${path}/_meta/oada-list-lib/${name}/rev`,
-      data: '4',
+      path: `${path}/_meta/oada-list-lib/${name}`,
+      data: { rev: '4' },
     } as PUTRequest)
   );
 });

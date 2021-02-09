@@ -169,9 +169,9 @@ test('it should detect new item', async (t) => {
   await Bluebird.delay(delay);
 
   const cb = conn.watch.firstCall?.args?.[0]?.watchCallback as (
-    change: Change
+    change: readonly Change[]
   ) => Promise<void>;
-  await Bluebird.map(change, (c) => cb?.(c));
+  await cb(change);
 
   t.is(opts.onAddItem.callCount, 1);
   t.is(opts.onItem.callCount, 1);
@@ -216,9 +216,9 @@ test('it should detect removed item', async (t) => {
   await Bluebird.delay(delay);
 
   const cb = conn.watch.firstCall?.args?.[0]?.watchCallback as (
-    change: Change
+    change: readonly Change[]
   ) => Promise<void>;
-  await Bluebird.map(change, (c) => cb?.(c));
+  await cb(change);
 
   t.is(opts.onAddItem.callCount, 0);
   t.is(opts.onItem.callCount, 0);
