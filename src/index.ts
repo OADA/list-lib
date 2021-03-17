@@ -282,7 +282,7 @@ export class ListWatch<Item = unknown> {
           try {
             return this.getItemState(id);
           } catch (err) {
-            error(err);
+            error('Error getting item state: %O', err);
           }
         });
       };
@@ -522,40 +522,49 @@ export class ListWatch<Item = unknown> {
     const _states = (Array.isArray(states) ? states : [states]) as ItemState[];
     await Bluebird.map(_ids, async (id, i) => {
       const state = _states[i];
-      switch (state) {
-        case ItemState.New:
-          {
-            const { data: item } = (await this.#conn.get({
-              path: join(path, id),
-            })) as GetResponse<Resource>;
-            await this.handleNewItem(list._rev + '', id, item);
-          }
-          break;
-        case ItemState.Modified:
-          {
-            const { data: item } = await this.#conn.get({
-              path: join(path, id),
+      try {
+        switch (state) {
+          case ItemState.New:
+            {
+              const { data: item } = (await this.#conn.get({
+                path: join(path, id),
+              })) as GetResponse<Resource>;
+              await this.handleNewItem(list._rev + '', id, item);
+            }
+            break;
+          case ItemState.Modified:
+            {
+              const { data: item } = await this.#conn.get({
+                path: join(path, id),
+              });
+              const change: Change = {
+                resource_id: pointer.get(list, id)._id,
+                path: '',
+                // TODO: what is the type the change??
+                type: 'merge',
+                body: item as {},
+              };
+              await this.handleItemChange(id, change);
+            }
+            break;
+          case ItemState.Handled:
+            info(`Recoding item ${id} as handled for ${path}`);
+            // Mark handled for all callbacks?
+            await this.#meta.setHandled(id, {
+              onAddItem: { rev },
+              onItem: { rev },
             });
-            const change: Change = {
-              resource_id: pointer.get(list, id)._id,
-              path: '',
-              // TODO: what is the type the change??
-              type: 'merge',
-              body: item as {},
-            };
-            await this.handleItemChange(id, change);
-          }
-          break;
-        case ItemState.Handled:
-          info(`Recoding item ${id} as handled for ${path}`);
-          // Mark handled for all callbacks?
-          await this.#meta.setHandled(id, {
-            onAddItem: { rev },
-            onItem: { rev },
-          });
-          break;
-        default:
-          assertNever(state);
+            break;
+          default:
+            assertNever(state);
+        }
+      } catch (err: unknown) {
+        error(
+          'Error processing item state "%s" for item %s: %O',
+          state,
+          id,
+          err
+        );
       }
     });
   }
@@ -584,6 +593,7 @@ export class ListWatch<Item = unknown> {
     // TODO: Clean up control flow to not need this?
     const currentItemsNew = !(await this.#meta.init()) || !this.#resume;
     if (currentItemsNew) {
+      trace('Treating current list items as new items');
       const { data: list } = (await conn.get({
         path,
         tree,
@@ -592,8 +602,10 @@ export class ListWatch<Item = unknown> {
       const items = getListItems(list, this.itemsPath);
 
       // ask for states of pre-existing items
+      trace('Calling onNewList');
       const states = await this.#onNewList(items);
       // Set the states
+      trace('Updating item states based on callback result');
       await this.updateItemState(list, items, states);
     }
 

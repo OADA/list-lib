@@ -1,5 +1,6 @@
 import { join } from 'path';
 
+import Bluebird from 'bluebird';
 import clone from 'clone-deep';
 import pointer from 'json-pointer';
 
@@ -57,6 +58,8 @@ export class Metadata {
   #path;
   #tree?: object;
   #timeout;
+  // Init stuff?
+  #done!: (err?: any) => void;
   #wait: Promise<unknown>;
 
   get rev(): string {
@@ -132,15 +135,25 @@ export class Metadata {
         _type: 'application/json',
         handled: listTree,
       });
+    } else {
+      // Make up a tree? idk man
+      this.#tree = {};
+      pointer.set(this.#tree, this.#path, {
+        _type: 'application/json',
+        handled: { '*': {} },
+      });
     }
-    this.#wait = Promise.resolve();
+    console.dir(this.#tree, { depth: null });
+    this.#wait = Bluebird.fromCallback((done) => {
+      this.#done = done;
+    });
     // TODO: Use timeouts for all updates?
     this.#timeout = setTimeout(async () => {
       await this.#wait;
+      trace('Recording rev %d', this.#rev);
       this.#wait = this.#conn.put({
         path: this.#path,
-        // TODO: Figure out why tree here causes If-Match error?
-        //tree: this.#tree,
+        tree: this.#tree,
         data: { rev: this.#rev },
       });
     }, 100);
@@ -153,17 +166,41 @@ export class Metadata {
    * @TODO I hate needing to call init...
    */
   public async init(): Promise<boolean> {
-    // Try to get our metadata about this list
     try {
-      const { data: rev } = await this.#conn.get({
-        path: join(this.#path, 'rev'),
-      });
-      this.#rev = rev as string;
-      return true;
+      // Try to get our metadata about this list
+      try {
+        const { data: rev } = await this.#conn.get({
+          path: join(this.#path, 'rev'),
+        });
+        this.#rev = rev as string;
+        this.#done();
+        return true;
+      } catch (err: unknown) {
+        // Create our metadata?
+        const {
+          headers: { 'content-location': location },
+        } = await this.#conn.post({
+          path: '/resources/',
+          data: {},
+        });
+        await this.#conn.put({
+          path: this.#path,
+          tree: this.#tree,
+          data: { _id: location.substring(1) },
+        });
+        await this.#conn.put({
+          path: this.#path,
+          tree: this.#tree,
+          data: {
+            rev: this.#rev,
+          },
+        });
+        this.#done();
+        return false;
+      }
     } catch (err: unknown) {
-      // Create our metadata?
-      await this.#conn.put({ path: this.#path, tree: this.#tree, data: {} });
-      return false;
+      this.#done(err);
+      throw err;
     }
   }
 }
