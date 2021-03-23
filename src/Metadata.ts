@@ -80,10 +80,14 @@ export class Metadata {
   async setHandled(path: string, item: Item | undefined) {
     if (item) {
       // Merge with current info
+
+      const data: any = {};
+      pointer.set(data, `/handled${path}`, item);
+
       await this.#conn.put({
-        path: join(this.#path, 'handled', path),
+        path: this.#path,
         tree: this.#tree,
-        data: item,
+        data: data,
       });
     } else {
       // Unset info?
