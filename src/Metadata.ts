@@ -51,10 +51,10 @@ export class Metadata {
   /**
    * The rev we left off on
    */
-  #rev = '0';
+  #rev? = '0';
 
   // Where to store state
-  #conn;
+  #conn?;
   #path;
   #tree?: object;
   #timeout;
@@ -63,7 +63,7 @@ export class Metadata {
   #wait: Promise<unknown>;
 
   get rev(): string {
-    return this.#rev;
+    return this.#rev + '';
   }
   set rev(rev) {
     trace(`Updating local rev to ${rev}`);
@@ -84,14 +84,14 @@ export class Metadata {
       const data: any = {};
       pointer.set(data, `/handled${path}`, item);
 
-      await this.#conn.put({
+      await this.#conn?.put({
         path: this.#path,
         tree: this.#tree,
         data: data,
       });
     } else {
       // Unset info?
-      await this.#conn.delete({ path: join(this.#path, 'handled', path) });
+      await this.#conn?.delete({ path: join(this.#path, 'handled', path) });
     }
     //this.#updated = true;
   }
@@ -102,6 +102,10 @@ export class Metadata {
    * @param path JSON pointer of list item
    */
   async handled(path: string): Promise<Item | undefined> {
+    if (!this.#conn) {
+      return undefined;
+    }
+
     try {
       const { data } = await this.#conn.get({
         path: join(this.#path, 'handled', path),
@@ -125,9 +129,9 @@ export class Metadata {
     /**
      * Optional OADA tree corresponding to `path`
      */
-    tree: object | undefined;
+    tree?: object;
     name: string;
-    conn: Conn;
+    conn?: Conn;
   }) {
     this.#conn = conn;
     this.#path = join(path, '_meta', Metadata.META_KEY, name);
@@ -155,11 +159,13 @@ export class Metadata {
     this.#timeout = setTimeout(async () => {
       await this.#wait;
       trace('Recording rev %d', this.#rev);
-      this.#wait = this.#conn.put({
-        path: this.#path,
-        tree: this.#tree,
-        data: { rev: this.#rev },
-      });
+      this.#wait = Promise.resolve(
+        this.#conn?.put({
+          path: this.#path,
+          tree: this.#tree,
+          data: { rev: this.#rev } as any,
+        })
+      );
     }, 100);
   }
 
@@ -171,6 +177,11 @@ export class Metadata {
    */
   public async init(): Promise<boolean> {
     try {
+      if (!this.#conn) {
+        this.#rev = undefined;
+        this.#done();
+        return false;
+      }
       // Try to get our metadata about this list
       try {
         const { data: rev } = await this.#conn.get({
@@ -197,7 +208,7 @@ export class Metadata {
           tree: this.#tree,
           data: {
             rev: this.#rev,
-          },
+          } as any,
         });
         this.#done();
         return false;

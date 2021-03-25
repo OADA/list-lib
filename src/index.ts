@@ -291,7 +291,7 @@ export class ListWatch<Item = unknown> {
     this.#meta = new Metadata({
       // Don't persist metdata if service does not "resume"
       //persistInterval: this.#resume ? persistInterval : 0,
-      conn: this.#conn,
+      conn: this.#resume ? this.#conn : undefined,
       path,
       tree,
       name,
@@ -610,15 +610,14 @@ export class ListWatch<Item = unknown> {
     }
 
     // Setup watch on the path
-    const { rev } = this.#meta;
     if (this.#resume) {
-      trace(`Resuming watch from rev ${rev}`);
+      trace('Resuming watch from rev %d', this.#meta.rev);
     }
     // Queue to handle changes in order
     const changeQueue = new PQueue({ concurrency: 1 });
     this.#id = await conn.watch({
       path,
-      rev: this.#resume ? this.#meta.rev : rev,
+      rev: this.#resume ? this.#meta.rev : undefined,
       type: 'tree',
       watchCallback: (changes) =>
         changeQueue.add(async () => {
