@@ -151,7 +151,7 @@ export class Metadata {
         handled: { '*': {} },
       });
     }
-    console.dir(this.#tree, { depth: null });
+    //console.dir(this.#tree, { depth: null });
     this.#wait = Bluebird.fromCallback((done) => {
       this.#done = done;
     });
