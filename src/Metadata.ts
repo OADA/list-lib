@@ -51,7 +51,7 @@ export class Metadata {
   /**
    * The rev we left off on
    */
-  #rev? = '0';
+  #rev?: string;
 
   // Where to store state
   #conn?;
