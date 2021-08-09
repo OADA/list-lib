@@ -63,7 +63,7 @@ function assumeItemState<State extends ItemState>(state: State) {
   function assume(id: readonly string[]): State[];
   function assume(id: string): State;
   function assume(id: string | readonly string[]) {
-    warn(`Assuming item(s) ${id} is ${state}`);
+    warn('Assuming state %s for item(s) %s', state, id);
     if (Array.isArray(id)) {
       const ids = id;
       return ids.map(() => state);
@@ -241,7 +241,7 @@ export class ListWatch<Item = unknown> {
     onNewList,
     onDeleteList = async () => {
       // TODO: Actually handle the list being deleted (redo watch?)
-      error(`Unhandled delete of list ${path}`);
+      error('Unhandled delete of list %s', path);
       process.exit();
     },
     // If no callback given, assume everything unknown is new
@@ -282,7 +282,7 @@ export class ListWatch<Item = unknown> {
           try {
             return this.getItemState(id);
           } catch (err) {
-            error('Error getting item state: %O', err);
+            error(err, 'Error getting item state');
           }
         });
       };
@@ -379,7 +379,7 @@ export class ListWatch<Item = unknown> {
     // Needed because TS is weird about asserts...
     const assertItem: TypeAssert<Item> = this.#assertItem;
 
-    info(`Detected new item ${id} in ${path}, rev ${rev}`);
+    info('Detected new item %s in %s, rev %s', id, path, rev);
     const { _rev } = item;
     assertItem(item);
 
@@ -410,7 +410,7 @@ export class ListWatch<Item = unknown> {
     const rev = change.body._rev as string;
 
     // TODO: How best to handle change to a descendant of an item?
-    info(`Detected change to item ${id} in ${path}, rev ${rev}`);
+    info('Detected change to item %s in %s, rev %s', id, path, rev);
 
     const { _rev } = change.body;
     try {
@@ -441,15 +441,15 @@ export class ListWatch<Item = unknown> {
     // Ignore _ keys of OADA
     //const items = Object.keys(list).filter((k) => !k.match(/^_/));
     const items = getListItems(list as List, this.itemsPath);
-    trace(`handleListChange: have items = `, items);
+    trace(items, 'handleListChange');
 
     switch (type) {
       case 'merge':
         await Bluebird.map(items, async (id) => {
           try {
-            trace('handleListChange: Processing item ', id);
+            trace('handleListChange: Processing item %s', id);
             const lchange = pointer.get(list, id) as Partial<Link>;
-            trace('handleListChange: lchange = ', lchange);
+            trace(lchange, 'handleListChange: lchange');
 
             // If there is an _id this is a new link in the list right?
             if (lchange._id) {
@@ -462,13 +462,17 @@ export class ListWatch<Item = unknown> {
               await this.handleNewItem(rev + '', id, item);
             } else {
               // TODO: What should we do now??
-              trace(`Ignoring non-link key added to list ${path}, rev ${rev}`);
+              trace(
+                'Ignoring non-link key added to list %s, rev %s',
+                path,
+                rev
+              );
             }
           } catch (err: unknown) {
             // Log error with this item but continue map over other items
             error(
-              `Error processing change for ${id} at ${path}, rev ${rev}: %O`,
-              err
+              err,
+              `Error processing change for ${id} at ${path}, rev ${rev}`
             );
           }
         });
@@ -480,7 +484,12 @@ export class ListWatch<Item = unknown> {
             const lchange = pointer.get(list, id);
 
             if (lchange === null) {
-              info(`Detected removal of item ${id} from ${path}, rev ${rev}`);
+              info(
+                'Detected removal of item %s from %s, rev %s',
+                id,
+                path,
+                rev
+              );
               try {
                 await (this.#onRemoveItem && this.#onRemoveItem(id));
               } finally {
@@ -489,13 +498,17 @@ export class ListWatch<Item = unknown> {
               }
             } else {
               // TODO: What does this mean??
-              trace(`Ignoring non-link key added to list ${path}, rev ${rev}`);
+              trace(
+                'Ignoring non-link key added to list %s, rev %s',
+                path,
+                rev
+              );
             }
           } catch (err: unknown) {
             // Log error with this item but continue map over other items
             error(
-              `Error processing change for ${id} at ${path}, rev ${rev}: %O`,
-              err
+              err,
+              `Error processing change for ${id} at ${path}, rev ${rev}`
             );
           }
         });
@@ -548,7 +561,7 @@ export class ListWatch<Item = unknown> {
             }
             break;
           case ItemState.Handled:
-            info(`Recoding item ${id} as handled for ${path}`);
+            info('Recording item %s as handled for %s', id, path);
             // Mark handled for all callbacks?
             await this.#meta.setHandled(id, {
               onAddItem: { rev },
@@ -559,12 +572,7 @@ export class ListWatch<Item = unknown> {
             assertNever(state);
         }
       } catch (err: unknown) {
-        error(
-          'Error processing item state "%s" for item %s: %O',
-          state,
-          id,
-          err
-        );
+        error(err, `Error processing item state "${state}" for item ${id}`);
       }
     });
   }
@@ -576,14 +584,14 @@ export class ListWatch<Item = unknown> {
     const { path, tree } = this;
     const conn = this.#conn;
 
-    info(`Ensuring ${path} exists`);
+    info('Ensuring %s exists', path);
     try {
       await conn.head({ path });
     } catch (err) {
       if (err.status === 403 || err.status === 404) {
         // Create it
         await conn.put({ path, tree, data: {} });
-        trace(`Created ${path} because it did not exist`);
+        trace('Created %s because it did not exist', path);
       } else {
         error(err);
         throw err;
@@ -611,7 +619,7 @@ export class ListWatch<Item = unknown> {
 
     // Setup watch on the path
     if (this.#resume) {
-      trace('Resuming watch from rev %d', this.#meta.rev);
+      trace('Resuming watch from rev %s', this.#meta.rev);
     }
     // Queue to handle changes in order
     const changeQueue = new PQueue({ concurrency: 1 });
@@ -625,103 +633,98 @@ export class ListWatch<Item = unknown> {
           const rootChange = changes[0];
 
           // TODO: Better way than just looping through them all?
-          await Bluebird.each(
-            changes,
-            async ({ type, path: changePath, body, ...ctx }) => {
-              if (body === null && type === 'delete' && changePath === '') {
-                // The list itself was deleted
-                warn(`Detected delete of list ${path}`);
+          await Bluebird.each(changes, async (change) => {
+            const { type, path: changePath, body, ...ctx } = change;
 
-                await this.#onDeleteList();
-                return;
-              }
+            if (body === null && type === 'delete' && changePath === '') {
+              // The list itself was deleted
+              warn('Detected delete of list %s', path);
 
-              const rev = (body as Change['body'])._rev as string;
+              await this.#onDeleteList();
+              return;
+            }
 
-              trace(`Received change to ${changePath}: %O`, {
-                type,
-                body,
-                ...ctx,
-              });
+            const rev = (body as Change['body'])._rev as string;
 
-              let itemsFound = !!changePath;
-              let listChange = body as DeepPartial<List>;
-              try {
-                // The actual change was to a descendant of the list
-                if (changePath) {
-                  // In order to decide if this change was to the list or to an item, need to check if itemsPath
-                  // matches the changePath: if it does, it is to an item.  If it doesn't, it's probably to the list.
+            trace(change, 'Received change');
 
-                  // Reconstruct change to list?
-                  const changeObj = {};
-                  let isListChange = false;
-                  if (this.itemsPath) {
-                    pointer.set(changeObj, changePath, true); // just put true here for now to check if path matches
-                    const pathmatches = JSONPath({
-                      resultType: 'pointer',
-                      path: this.itemsPath,
-                      json: changeObj,
-                      preventEval: true,
-                    });
-                    if (pathmatches && pathmatches.length === 0) {
-                      // if it does not match, this must be above the items
-                      isListChange = true;
-                      trace(
-                        'Have a write to the list under itemsPath rather than to any of the items'
-                      );
-                    }
-                  }
+            let itemsFound = !!changePath;
+            let listChange = body as DeepPartial<List>;
+            try {
+              // The actual change was to a descendant of the list
+              if (changePath) {
+                // To decide if this change was to the list or to an item,
+                // need to check if itemsPath matches the changePath:
+                // if it does, it is to an item.
+                // If it doesn't, it's probably to the list.
 
-                  // now put the actual change body in place of the true
-                  pointer.set(changeObj, changePath, body);
-                  // Find items involved in the change
-                  const itemsChanged = getListItems(changeObj, this.itemsPath);
-                  // The change was to items of the list (or their descendants)
-                  if (!isListChange && itemsChanged.length >= 1) {
-                    return Bluebird.map(itemsChanged, (item) => {
-                      const body = pointer.get(changeObj, item);
-                      // Make change start at item instead of the list
-                      const path = changePath.slice(item.length);
-                      const change: Change = {
-                        ...ctx,
-                        type,
-                        path,
-                        body,
-                      };
-                      // Check that it is a resource change?
-                      if (!body._rev) {
-                        warn(
-                          `Ignoring unexpected (as in the body does not have a _rev) change: %O`,
-                          change
-                        );
-                        return;
-                      }
-                      return this.handleItemChange(item, change);
-                    });
-                  } else {
-                    // The change is between the list and items
-                    // (multiple link levels)
-                    listChange = changeObj;
+                // Reconstruct change to list?
+                const changeObj = {};
+                let isListChange = false;
+                if (this.itemsPath) {
+                  // just put true here for now to check if path matches
+                  pointer.set(changeObj, changePath, true);
+                  const pathmatches = JSONPath({
+                    resultType: 'pointer',
+                    path: this.itemsPath,
+                    json: changeObj,
+                    preventEval: true,
+                  });
+                  if (pathmatches?.length === 0) {
+                    // if it does not match, this must be above the items
+                    isListChange = true;
+                    trace(
+                      'Have a write to the list under itemsPath rather than to any of the items'
+                    );
                   }
                 }
-                trace(
-                  `Change was to the list itself because changePath is empty, calling handleListChange`
-                );
-                // The change was to the list itself
-                itemsFound =
-                  (await this.handleListChange(listChange, type)) || itemsFound;
-              } catch (err: unknown) {
-                error(
-                  `Error processing change at ${path}, rev ${rev}: %O`,
-                  err
-                );
+
+                // now put the actual change body in place of the true
+                pointer.set(changeObj, changePath, body);
+                // Find items involved in the change
+                const itemsChanged = getListItems(changeObj, this.itemsPath);
+                // The change was to items of the list (or their descendants)
+                if (!isListChange && itemsChanged.length >= 1) {
+                  return Bluebird.map(itemsChanged, (item) => {
+                    const body = pointer.get(changeObj, item);
+                    // Make change start at item instead of the list
+                    const path = changePath.slice(item.length);
+                    const change: Change = {
+                      ...ctx,
+                      type,
+                      path,
+                      body,
+                    };
+                    // Check that it is a resource change?
+                    if (!body._rev) {
+                      warn(
+                        change,
+                        'Ignoring unexpected (as in the body does not have a _rev) change'
+                      );
+                      return;
+                    }
+                    return this.handleItemChange(item, change);
+                  });
+                } else {
+                  // The change is between the list and items
+                  // (multiple link levels)
+                  listChange = changeObj;
+                }
               }
+              trace(
+                'Change was to the list itself because changePath is empty, calling handleListChange'
+              );
+              // The change was to the list itself
+              itemsFound =
+                (await this.handleListChange(listChange, type)) || itemsFound;
+            } catch (err: unknown) {
+              error(err, `Error processing change at ${path}, rev ${rev}`);
             }
-          );
+          });
 
           if (this.#resume) {
             trace(
-              `Received change to root of list, updating handled rev in our _meta records`
+              'Received change to root of list, updating handled rev in our _meta records'
             );
             this.#meta.rev = (rootChange.body as Resource)?._rev + '';
           }

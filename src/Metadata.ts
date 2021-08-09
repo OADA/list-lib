@@ -158,7 +158,7 @@ export class Metadata {
     // TODO: Use timeouts for all updates?
     this.#timeout = setTimeout(async () => {
       await this.#wait;
-      trace('Recording rev %d', this.#rev);
+      trace('Recording rev %s', this.#rev);
       this.#wait = Promise.resolve(
         this.#conn?.put({
           path: this.#path,
