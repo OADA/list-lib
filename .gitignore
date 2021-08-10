@@ -1,2 +1,19 @@
 node_modules
+package.lock
 lib
+
+*.log
+.DS_Store
+
+# TypeScript
+dist
+*.tsbuildinfo
+
+# yarn 2 stuff
+.yarn/*
+!.yarn/releases
+!.yarn/plugins
+!.yarn/versions
+.pnp.*
+# ignore sdk stuff
+.vim

@@ -48,6 +48,7 @@
     "@types/node": "^14.14.22",
     "@types/object-assign-deep": "^0.4.0",
     "@types/sinon": "^9.0.10",
+    "@yarnpkg/sdks": "^2.4.1-rc.4",
     "ava": "^3.15.0",
     "prettier": "^2.2.1",
     "sinon": "^9.2.3",
@@ -62,5 +63,6 @@
     "json-pointer": "^0.6.0",
     "jsonpath-plus": "^5.0.2",
     "p-queue": "^6.6.2"
-  }
+  },
+  "packageManager": "yarn@3.0.0"
 }
