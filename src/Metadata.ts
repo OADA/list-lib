@@ -66,6 +66,10 @@ export class Metadata {
     return this.#rev + '';
   }
   set rev(rev) {
+    if (this.#rev === rev) {
+      // No need to update
+      return;
+    }
     trace(`Updating local rev to ${rev}`);
     this.#rev = rev;
     this.#timeout.refresh();
