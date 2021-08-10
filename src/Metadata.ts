@@ -66,6 +66,10 @@ export class Metadata {
     return this.#rev + '';
   }
   set rev(rev) {
+    if (this.#rev === rev) {
+      // No need to update
+      return;
+    }
     trace(`Updating local rev to ${rev}`);
     this.#rev = rev;
     this.#timeout.refresh();
@@ -158,7 +162,7 @@ export class Metadata {
     // TODO: Use timeouts for all updates?
     this.#timeout = setTimeout(async () => {
       await this.#wait;
-      trace('Recording rev %d', this.#rev);
+      trace('Recording rev %s', this.#rev);
       this.#wait = Promise.resolve(
         this.#conn?.put({
           path: this.#path,
