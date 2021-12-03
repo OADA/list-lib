@@ -1,4 +1,21 @@
-import { join } from 'path';
+/**
+ * @license
+ * Copyright 2021 Open Ag Data Alliance
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import { join } from 'node:path';
 
 import Bluebird from 'bluebird';
 import clone from 'clone-deep';
@@ -14,28 +31,20 @@ const trace = debug('oada-list-lib#metadata:trace');
  *
  * @internal
  */
-export interface Item {
-  /**
-   * The callback which ran on item
-   */
-  [callback: string]: {
+export type Item = Record<
+  string,
+  {
     rev: string;
-  };
-}
+  }
+>;
 
 /**
  * Record of successfully handled list items
  *
  * @internal
  */
-export type Items = {
-  /**
-   * The list item(s) which ran
-   *
-   * Items can be nested
-   */
-  [key: string]: undefined | Item | Items;
-};
+// eslint-disable-next-line @typescript-eslint/consistent-indexed-object-style
+export type Items = { [key: string]: undefined | Item | Items };
 
 /**
  * Persistent data we store in the _meta of the list
@@ -46,7 +55,10 @@ export class Metadata {
   /**
    * @todo: Where in _meta to keep stuff?
    */
-  public static readonly META_KEY = 'oada-list-lib';
+  // eslint-disable-next-line @typescript-eslint/naming-convention
+  public static get META_KEY() {
+    return 'oada-list-lib';
+  }
 
   /**
    * The rev we left off on
@@ -56,20 +68,77 @@ export class Metadata {
   // Where to store state
   #conn?;
   #path;
-  #tree?: object;
-  #timeout;
+  #tree?: Record<string, unknown>;
+  #timeout: NodeJS.Timeout;
   // Init stuff?
-  #done!: (err?: any) => void;
+  #done!: (error?: unknown) => void;
   #wait: Promise<unknown>;
 
-  get rev(): string {
-    return this.#rev + '';
+  constructor({
+    conn,
+    path,
+    tree,
+    name,
+  }: {
+    /**
+     * The path to the resource with which to associate this metadata
+     */
+    path: string;
+    /**
+     * Optional OADA tree corresponding to `path`
+     */
+    tree?: Record<string, unknown>;
+    name: string;
+    conn?: Conn;
+  }) {
+    this.#conn = conn;
+    this.#path = join(path, '_meta', Metadata.META_KEY, name);
+    this.#tree = clone(tree);
+    if (this.#tree) {
+      // Replicate list tree under handled key?
+      const listTree: unknown = clone(pointer.get(this.#tree, path));
+      pointer.set(this.#tree, this.#path, {
+        _type: 'application/json',
+        handled: listTree,
+      });
+    } else {
+      // Make up a tree? idk man
+      this.#tree = {};
+      pointer.set(this.#tree, this.#path, {
+        _type: 'application/json',
+        handled: { '*': {} },
+      });
+    }
+
+    // Console.dir(this.#tree, { depth: null });
+    this.#wait = Bluebird.fromCallback((done) => {
+      this.#done = done;
+    });
+    // TODO: Use timeouts for all updates?
+    this.#timeout = setTimeout(async () => {
+      await this.#wait;
+      trace('Recording rev %s', this.#rev);
+      this.#wait = Promise.resolve(
+        this.#conn?.put({
+          path: this.#path,
+          tree: this.#tree,
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+          data: { rev: this.#rev } as any,
+        })
+      );
+    }, 100);
   }
+
+  get rev(): string {
+    return `${this.#rev}`;
+  }
+
   set rev(rev) {
     if (this.#rev === rev) {
       // No need to update
       return;
     }
+
     trace(`Updating local rev to ${rev}`);
     this.#rev = rev;
     this.#timeout.refresh();
@@ -81,7 +150,7 @@ export class Metadata {
    * @param path JSON pointer of list item
    * @param item Item info to set
    */
-  async setHandled(path: string, item: Item | undefined) {
+  async setHandled(path: string, item?: Item) {
     if (item) {
       // Merge with current info
 
@@ -91,13 +160,14 @@ export class Metadata {
       await this.#conn?.put({
         path: this.#path,
         tree: this.#tree,
-        data: data,
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        data,
       });
     } else {
       // Unset info?
       await this.#conn?.delete({ path: join(this.#path, 'handled', path) });
     }
-    //this.#updated = true;
+    // This.#updated = true;
   }
 
   /**
@@ -120,59 +190,6 @@ export class Metadata {
     }
   }
 
-  constructor({
-    conn,
-    path,
-    tree,
-    name,
-  }: {
-    /**
-     * The path to the resource with which to associate this metadata
-     */
-    path: string;
-    /**
-     * Optional OADA tree corresponding to `path`
-     */
-    tree?: object;
-    name: string;
-    conn?: Conn;
-  }) {
-    this.#conn = conn;
-    this.#path = join(path, '_meta', Metadata.META_KEY, name);
-    this.#tree = clone(tree);
-    if (this.#tree) {
-      // Replicate list tree under handled key?
-      const listTree = clone(pointer.get(this.#tree, path));
-      pointer.set(this.#tree, this.#path, {
-        _type: 'application/json',
-        handled: listTree,
-      });
-    } else {
-      // Make up a tree? idk man
-      this.#tree = {};
-      pointer.set(this.#tree, this.#path, {
-        _type: 'application/json',
-        handled: { '*': {} },
-      });
-    }
-    //console.dir(this.#tree, { depth: null });
-    this.#wait = Bluebird.fromCallback((done) => {
-      this.#done = done;
-    });
-    // TODO: Use timeouts for all updates?
-    this.#timeout = setTimeout(async () => {
-      await this.#wait;
-      trace('Recording rev %s', this.#rev);
-      this.#wait = Promise.resolve(
-        this.#conn?.put({
-          path: this.#path,
-          tree: this.#tree,
-          data: { rev: this.#rev } as any,
-        })
-      );
-    }, 100);
-  }
-
   /**
    * Initialize the connection to the meta resource
    * @returns whether existing metadata was found
@@ -186,6 +203,7 @@ export class Metadata {
         this.#done();
         return false;
       }
+
       // Try to get our metadata about this list
       try {
         const { data: rev } = await this.#conn.get({
@@ -194,7 +212,7 @@ export class Metadata {
         this.#rev = rev as string;
         this.#done();
         return true;
-      } catch (err: unknown) {
+      } catch {
         // Create our metadata?
         const {
           headers: { 'content-location': location },
@@ -205,11 +223,12 @@ export class Metadata {
         await this.#conn.put({
           path: this.#path,
           tree: this.#tree,
-          data: { _id: location.substring(1) },
+          data: { _id: location.slice(1) },
         });
         await this.#conn.put({
           path: this.#path,
           tree: this.#tree,
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
           data: {
             rev: this.#rev,
           } as any,
@@ -217,9 +236,9 @@ export class Metadata {
         this.#done();
         return false;
       }
-    } catch (err: unknown) {
-      this.#done(err);
-      throw err;
+    } catch (error: unknown) {
+      this.#done(error);
+      throw error;
     }
   }
 }

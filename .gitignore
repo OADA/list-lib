@@ -1,6 +1,8 @@
 node_modules
 package.lock
 lib
+.dccache
+.history
 
 *.log
 .DS_Store

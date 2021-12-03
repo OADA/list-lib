@@ -1,18 +1,36 @@
-import { join } from 'path';
+/**
+ * @license
+ * Copyright 2021 Open Ag Data Alliance
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/* eslint-disable unicorn/no-await-expression-member */
+
+import { join } from 'node:path';
 
 import Bluebird from 'bluebird';
-import pointer from 'json-pointer';
 import { JSONPath } from 'jsonpath-plus';
 import PQueue from 'p-queue';
 import debug from 'debug';
+import pointer from 'json-pointer';
 
-import type { TypeAssert } from '@oada/types';
-import type { Resource } from '@oada/types/oada/resource';
-import type { Link } from '@oada/types/oada/link/v1';
-import type V2Changes from '@oada/types/oada/change/v2';
 import type { ConnectionResponse } from '@oada/client';
+import type { Link } from '@oada/types/oada/link/v1';
+import type { Resource } from '@oada/types/oada/resource';
+import type V2Changes from '@oada/types/oada/change/v2';
 
-import { Options, ItemState } from './Options';
+import { ItemState, Options } from './Options';
 import { Metadata } from './Metadata';
 
 const info = debug('oada-list-lib:info');
@@ -30,7 +48,6 @@ export type Change = V2Changes[0];
 /**
  * @public
  */
-export { Options, ItemState };
 
 /**
  * @internal
@@ -48,11 +65,13 @@ type DeepPartial<T> = {
   [P in keyof T]?: DeepPartial<T[P]>;
 };
 
+export type TypeAssert<T> = (value: unknown) => asserts value is T;
+
 /**
  * Tell TS we should never reach here (i.e., this should never be called)
  */
-function assertNever(val: never, mesg?: string): never {
-  throw new Error(mesg ?? `Bad value: ${val}`);
+function assertNever(value: never, message?: string): never {
+  throw new Error(message ?? `Bad value: ${value}`);
 }
 
 /**
@@ -68,6 +87,7 @@ function assumeItemState<State extends ItemState>(state: State) {
       const ids = id;
       return ids.map(() => state);
     }
+
     return state;
   }
 
@@ -77,42 +97,20 @@ function assumeItemState<State extends ItemState>(state: State) {
 /**
  * Type for the lists we can watch
  */
-export type List = Resource & {
-  [key: string]: Link | List;
-};
+// eslint-disable-next-line @typescript-eslint/consistent-indexed-object-style
+export type List = Resource & { [key: string]: Link | List };
 
-/**
- * @internal
- */
-declare module 'jsonpath-plus' {
-  interface JSONPathCallable {
-    (
-      options: JSONPathOptions & {
-        resultType: 'path' | 'pointer' | 'parentProperty';
-        wrap?: true;
-      }
-    ): string[];
-    (
-      path: JSONPathOptions['path'],
-      json: JSONPathOptions['json'],
-      callback?: JSONPathOptions['callback'],
-      otherTypeCallback?: JSONPathOptions['otherTypeCallback']
-    ): any[];
-  }
-}
-
-function getListItems(list: Partial<List>, path: string) {
-  const pointers = JSONPath({
+function getListItems(list: DeepPartial<List>, path: string) {
+  // eslint-disable-next-line new-cap
+  return JSONPath<string[]>({
     resultType: 'pointer',
     path,
     json: list,
     preventEval: true,
   }).filter(
     // Don't follow underscore keys
-    (p) => !/\/_/.test(p)
+    (p) => !p.includes('/_')
   );
-
-  return pointers;
 }
 
 /**
@@ -123,40 +121,39 @@ function getListItems(list: Partial<List>, path: string) {
 export type Tree = {
   _type?: string;
   _rev?: number;
-} & (
-  | {
-      [key: string]: Tree;
-    }
-  | {}
-);
+  // eslint-disable-next-line @typescript-eslint/consistent-indexed-object-style
+} & { [key: string]: Tree };
 
 /**
  * Generates an equivalent JSON Path from an OADA Tree object
  *
  * @internal
- * @experimental trees with multiple "paths" (excluing *)
+ * @experimental trees with multiple "paths" (excluding *)
  */
 export function pathFromTree(tree: Tree, root = ''): string {
   let path = '$.*';
   let outPath = '$';
 
-  const json = pointer.get(tree, root);
+  const json = pointer.get(tree, root) as Tree;
+  // eslint-disable-next-line no-constant-condition
   while (true) {
     // Get set of non underscore keys
-    const keys = [
-      ...new Set(
-        JSONPath({
+    const keys = Array.from(
+      new Set(
+        // eslint-disable-next-line new-cap
+        JSONPath<string[]>({
           resultType: 'parentProperty',
           path,
           json,
         }).filter((k) => !k.startsWith('_'))
-      ),
-    ];
+      )
+    );
     if (keys.length === 0) {
       break;
     }
 
-    outPath += '.' + (keys.length === 1 ? keys[0] : `[${keys.join(',')}]`);
+    // eslint-disable-next-line sonarjs/no-nested-template-literals
+    outPath += `.${keys.length === 1 ? keys[0] : `[${keys.join(',')}]`}`;
 
     path += '.*';
   }
@@ -174,6 +171,25 @@ export function pathFromTree(tree: Tree, root = ''): string {
  */
 export class ListWatch<Item = unknown> {
   /**
+   * Callback to make ListWatch consider every `Item` new
+   *
+   * @see getItemState
+   * @see onNewList
+   * @see ItemState.New
+   */
+  // eslint-disable-next-line @typescript-eslint/naming-convention
+  public static readonly AssumeNew = assumeItemState(ItemState.New);
+  /**
+   * Callback to make ListWatch consider every `Item` handled
+   *
+   * @see getItemState
+   * @see onNewList
+   * @see ItemState.Handled
+   */
+  // eslint-disable-next-line @typescript-eslint/naming-convention
+  public static readonly AssumeHandled = assumeItemState(ItemState.Handled);
+
+  /**
    * The OADA path of the List being watched
    */
   public readonly path;
@@ -190,23 +206,6 @@ export class ListWatch<Item = unknown> {
    * The unique name of this service/watch
    */
   public readonly name;
-
-  /**
-   * Callback to make ListWatch consider every `Item` new
-   *
-   * @see getItemState
-   * @see onNewList
-   * @see ItemState.New
-   */
-  public static readonly AssumeNew = assumeItemState(ItemState.New);
-  /**
-   * Callback to make ListWatch consider every `Item` handled
-   *
-   * @see getItemState
-   * @see onNewList
-   * @see ItemState.Handled
-   */
-  public static readonly AssumeHandled = assumeItemState(ItemState.Handled);
 
   #resume;
   #conn;
@@ -233,6 +232,7 @@ export class ListWatch<Item = unknown> {
     resume = false,
     conn,
     // If no assert given, assume all items valid
+    // eslint-disable-next-line @typescript-eslint/no-empty-function
     assertItem = () => {},
     onAddItem,
     onChangeItem,
@@ -242,6 +242,7 @@ export class ListWatch<Item = unknown> {
     onDeleteList = async () => {
       // TODO: Actually handle the list being deleted (redo watch?)
       error('Unhandled delete of list %s', path);
+      // eslint-disable-next-line no-process-exit, unicorn/no-process-exit
       process.exit();
     },
     // If no callback given, assume everything unknown is new
@@ -263,40 +264,40 @@ export class ListWatch<Item = unknown> {
 
     if (itemsPath) {
       this.itemsPath = itemsPath;
+    } else if (tree) {
+      // Assume items are at the leaves of tree
+      this.itemsPath = pathFromTree(tree as Tree, path);
     } else {
-      if (tree) {
-        // Asume items are at the leaves of tree
-        this.itemsPath = pathFromTree(tree, path);
-      } else {
-        // Assume flat list
-        this.itemsPath = '$.*';
-      }
+      // Assume flat list
+      this.itemsPath = '$.*';
     }
 
     if (onNewList) {
       this.#onNewList = onNewList;
     } else {
       // If no callback provided, ask client for states of pre-existing items
-      this.#onNewList = (ids: readonly string[]) => {
-        return Bluebird.map(ids, (id) => {
-          try {
-            return this.getItemState(id);
-          } catch (err) {
-            error(err, 'Error getting item state');
-          }
-        });
-      };
+      this.#onNewList = async (ids: readonly string[]) =>
+        Promise.all(
+          ids.map(async (id) => {
+            try {
+              return await this._getItemState(id);
+            } catch (cError: unknown) {
+              error(cError, 'Error getting item state');
+              throw cError;
+            }
+          })
+        );
     }
 
     this.#meta = new Metadata({
       // Don't persist metdata if service does not "resume"
-      //persistInterval: this.#resume ? persistInterval : 0,
+      // persistInterval: this.#resume ? persistInterval : 0,
       conn: this.#resume ? this.#conn : undefined,
       path,
       tree,
       name,
     });
-    this.initialize().catch(error);
+    this._initialize().catch(error);
   }
 
   /**
@@ -312,29 +313,52 @@ export class ListWatch<Item = unknown> {
      */
     all = false
   ) {
-    const { path } = this;
+    const { path, itemsPath } = this;
     const conn = this.#conn;
 
     const { data: list } = (await conn.get({ path })) as GetResponse<List>;
-    //const items = Object.keys(list).filter((k) => !k.match(/^_/));
-    const items = getListItems(list, this.itemsPath);
+    if (Buffer.isBuffer(list)) {
+      throw new TypeError('List is not a JSON object');
+    }
 
-    //const { rev } = this.#meta;
-    await Bluebird.map(items, async (id) => {
-      try {
-        if (!all && this.#meta.handled(id)) {
-          // We think this item is handled
-          return;
+    // Const items = Object.keys(list).filter((k) => !k.match(/^_/));
+    const items = getListItems(list as DeepPartial<List>, itemsPath);
+
+    // Const { rev } = this.#meta;
+    await Promise.all(
+      items.map(async (id) => {
+        try {
+          if (!all && (await this.#meta.handled(id))) {
+            // We think this item is handled
+            return;
+          }
+
+          // Ask lib user for state of this item
+          const state = await this._getItemState(id);
+
+          await this._updateItemState(list, id, state);
+        } catch (cError: unknown) {
+          error(cError);
         }
+      })
+    );
+  }
 
-        // Ask lib user for state of this item
-        const state = await this.getItemState(id);
+  /**
+   * Clean up metadata and unwatch list
+   */
+  public async stop() {
+    await this.#conn.unwatch(this.#id!);
+    await this.persistMeta();
+    // This.#meta.stop();
+  }
 
-        await this.updateItemState(list, id, state);
-      } catch (err: unknown) {
-        error(err);
-      }
-    });
+  /**
+   * Persist relevant info to the `_meta` of the list.
+   * This preserves it across restarts.
+   */
+  public async persistMeta() {
+    // Await this.#meta.persist();
   }
 
   /**
@@ -342,7 +366,7 @@ export class ListWatch<Item = unknown> {
    *
    * This handles fetching the Item before invoking the callback if needed
    */
-  private async getItemState(id: string): Promise<ItemState> {
+  private async _getItemState(id: string): Promise<ItemState> {
     // Needed because TS is weird about asserts...
     const assertItem: TypeAssert<Item> = this.#assertItem;
 
@@ -352,29 +376,12 @@ export class ListWatch<Item = unknown> {
       });
       assertItem(item);
       return this.#getItemState(id, item);
-    } else {
-      return this.#getItemState(id);
     }
+
+    return this.#getItemState(id);
   }
 
-  /**
-   * Clean up metadata and unwatch list
-   */
-  public async stop() {
-    await this.#conn.unwatch(this.#id!);
-    await this.persistMeta();
-    //this.#meta.stop();
-  }
-
-  /**
-   * Persist relevant info to the `_meta` of the list.
-   * This preserves it across restarts.
-   */
-  public async persistMeta() {
-    //await this.#meta.persist();
-  }
-
-  private async handleNewItem(rev: string, id: string, item: Resource) {
+  private async _handleNewItem(rev: string, id: string, item: Resource) {
     const { path } = this;
     // Needed because TS is weird about asserts...
     const assertItem: TypeAssert<Item> = this.#assertItem;
@@ -387,7 +394,7 @@ export class ListWatch<Item = unknown> {
       // Double check this is a new item?
       if (!(await this.#meta.handled(id))?.onAddItem) {
         await (this.#onAddItem && this.#onAddItem(item, id));
-        await this.#meta.setHandled(id, { onAddItem: { rev: _rev + '' } });
+        await this.#meta.setHandled(id, { onAddItem: { rev: `${_rev}` } });
       }
     } finally {
       // Call this even if previous callback errored
@@ -396,26 +403,27 @@ export class ListWatch<Item = unknown> {
       // or will the feed have one??
 
       // Double check this item is actually newer than last time
-      if (+_rev > +((await this.#meta.handled(id))?.onItem?.rev ?? 0)) {
-        // TODO: Why doesn't this.#onItem?.() work?
+      if (
+        Number(_rev) > Number((await this.#meta.handled(id))?.onItem?.rev ?? 0)
+      ) {
         await (this.#onItem && this.#onItem(item, id));
-        await this.#meta.setHandled(id, { onItem: { rev: _rev + '' } });
+        await this.#meta.setHandled(id, { onItem: { rev: `${_rev}` } });
       }
     }
   }
 
-  private async handleItemChange(id: string, change: Change) {
+  private async _handleItemChange(id: string, change: Change) {
     const { path } = this;
     const conn = this.#conn;
-    const rev = change.body._rev as string;
+    const rev = change.body?._rev;
 
     // TODO: How best to handle change to a descendant of an item?
     info('Detected change to item %s in %s, rev %s', id, path, rev);
 
-    const { _rev } = change.body;
+    const { _rev } = change.body as Resource;
     try {
       await (this.#onChangeItem && this.#onChangeItem(change, id));
-      await this.#meta.setHandled(id, { onChangeItem: { rev: _rev + '' } });
+      await this.#meta.setHandled(id, { onChangeItem: { rev: `${_rev}` } });
     } finally {
       if (this.#onItem) {
         // Needed because TS is weird about asserts...
@@ -426,95 +434,102 @@ export class ListWatch<Item = unknown> {
         });
         assertItem(item);
         await this.#onItem(item, id);
-        await this.#meta.setHandled(id, { onItem: { rev: _rev + '' } });
+        await this.#meta.setHandled(id, { onItem: { rev: `${_rev}` } });
       }
     }
   }
 
-  private async handleListChange(
+  private async _handleListChange(
     list: DeepPartial<List>,
     type: Change['type']
   ): Promise<boolean> {
-    const { path } = this;
+    const { path, itemsPath } = this;
     const conn = this.#conn;
     const rev = list._rev;
     // Ignore _ keys of OADA
-    //const items = Object.keys(list).filter((k) => !k.match(/^_/));
-    const items = getListItems(list as List, this.itemsPath);
+    // const items = Object.keys(list).filter((k) => !k.match(/^_/));
+    const items = getListItems(list, itemsPath);
     trace(items, 'handleListChange');
 
     switch (type) {
       case 'merge':
-        await Bluebird.map(items, async (id) => {
-          try {
-            trace('handleListChange: Processing item %s', id);
-            const lchange = pointer.get(list, id) as Partial<Link>;
-            trace(lchange, 'handleListChange: lchange');
+        await Promise.all(
+          items.map(async (id) => {
+            try {
+              trace('handleListChange: Processing item %s', id);
+              const ichang = pointer.get(list, id) as Partial<Link>;
+              trace(ichang, 'handleListChange');
 
-            // If there is an _id this is a new link in the list right?
-            if (lchange._id) {
-              trace(
-                'handleListChange: lchange has an _id, getting it and handing to handleNewItem'
-              );
-              const { data: item } = (await conn.get({
-                //joining path and id fails when jobs get moved into success/failure. Instead get the _id
-//                path: join(path, id),
-                path: `/${_id}`,
-              })) as GetResponse<Resource>;
-              await this.handleNewItem(rev + '', id, item);
-            } else {
-              // TODO: What should we do now??
-              trace(
-                'Ignoring non-link key added to list %s, rev %s',
-                path,
-                rev
+              // If there is an _id this is a new link in the list right?
+              if (ichang._id) {
+                trace(
+                  'handleListChange: change has an _id, getting it and handing to handleNewItem'
+                );
+                const { data: item } = (await conn.get({
+                  // Joining path and id fails when jobs get moved into success/failure. Instead get the _id
+                  //                path: join(path, id),
+                  path: `/${id}`,
+                })) as GetResponse<Resource>;
+                await this._handleNewItem(`${rev}`, id, item);
+              } else {
+                // TODO: What should we do now??
+                trace(
+                  'Ignoring non-link key added to list %s, rev %s',
+                  path,
+                  rev
+                );
+              }
+            } catch (cError: unknown) {
+              // Log error with this item but continue map over other items
+              error(
+                cError,
+                `Error processing change for ${id} at ${path}, rev ${rev}`
               );
             }
-          } catch (err: unknown) {
-            // Log error with this item but continue map over other items
-            error(
-              err,
-              `Error processing change for ${id} at ${path}, rev ${rev}`
-            );
-          }
-        });
+          })
+        );
         break;
 
       case 'delete':
-        await Bluebird.map(items, async (id) => {
-          try {
-            const lchange = pointer.get(list, id);
+        await Promise.all(
+          items.map(async (id) => {
+            try {
+              const lChange = pointer.get(list, id) as Partial<Link>;
 
-            if (lchange === null) {
-              info(
-                'Detected removal of item %s from %s, rev %s',
-                id,
-                path,
-                rev
-              );
-              try {
-                await (this.#onRemoveItem && this.#onRemoveItem(id));
-              } finally {
-                // Mark for delete?
-                await this.#meta.setHandled(id, undefined);
+              if (lChange === null) {
+                info(
+                  'Detected removal of item %s from %s, rev %s',
+                  id,
+                  path,
+                  rev
+                );
+                try {
+                  await (this.#onRemoveItem && this.#onRemoveItem(id));
+                } finally {
+                  // Mark for delete?
+                  await this.#meta.setHandled(id);
+                }
+              } else {
+                // TODO: What does this mean??
+                trace(
+                  'Ignoring non-link key added to list %s, rev %s',
+                  path,
+                  rev
+                );
               }
-            } else {
-              // TODO: What does this mean??
-              trace(
-                'Ignoring non-link key added to list %s, rev %s',
-                path,
-                rev
+            } catch (cError: unknown) {
+              // Log error with this item but continue map over other items
+              error(
+                cError,
+                `Error processing change for ${id} at ${path}, rev ${rev}`
               );
             }
-          } catch (err: unknown) {
-            // Log error with this item but continue map over other items
-            error(
-              err,
-              `Error processing change for ${id} at ${path}, rev ${rev}`
-            );
-          }
-        });
+          })
+        );
         break;
+
+      default:
+        throw new TypeError(`Unknown change type ${type}`);
     }
 
     return items.length > 0;
@@ -525,7 +540,7 @@ export class ListWatch<Item = unknown> {
    *
    * @see ItemState
    */
-  private async updateItemState(
+  private async _updateItemState(
     list: List,
     ids: string | readonly string[],
     states: ItemState | readonly ItemState[]
@@ -535,68 +550,76 @@ export class ListWatch<Item = unknown> {
 
     const _ids = Array.isArray(ids) ? ids : [ids];
     const _states = (Array.isArray(states) ? states : [states]) as ItemState[];
-    await Bluebird.map(_ids, async (id, i) => {
-      const state = _states[i];
-      try {
-        switch (state) {
-          case ItemState.New:
-            {
-              const { data: item } = (await this.#conn.get({
-                path: join(path, id),
-              })) as GetResponse<Resource>;
-              await this.handleNewItem(list._rev + '', id, item);
-            }
-            break;
-          case ItemState.Modified:
-            {
-              const { data: item } = await this.#conn.get({
-                path: join(path, id),
+    await Promise.all(
+      _ids.map(async (id, index) => {
+        const state = _states[Number(index)];
+        try {
+          switch (state) {
+            case ItemState.New:
+              {
+                const { data: item } = (await this.#conn.get({
+                  path: join(path, id),
+                })) as GetResponse<Resource>;
+                await this._handleNewItem(`${list._rev}`, id, item);
+              }
+
+              break;
+            case ItemState.Modified:
+              {
+                const { data: item } = await this.#conn.get({
+                  path: join(path, id),
+                });
+                const change: Change = {
+                  resource_id: pointer.get(list, id)._id as string,
+                  path: '',
+                  type: 'merge',
+                  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+                  body: item as any,
+                };
+                await this._handleItemChange(id, change);
+              }
+
+              break;
+            case ItemState.Handled:
+              info('Recording item %s as handled for %s', id, path);
+              // Mark handled for all callbacks?
+              await this.#meta.setHandled(id, {
+                onAddItem: { rev },
+                onItem: { rev },
               });
-              const change: Change = {
-                resource_id: pointer.get(list, id)._id,
-                path: '',
-                // TODO: what is the type the change??
-                type: 'merge',
-                body: item as {},
-              };
-              await this.handleItemChange(id, change);
-            }
-            break;
-          case ItemState.Handled:
-            info('Recording item %s as handled for %s', id, path);
-            // Mark handled for all callbacks?
-            await this.#meta.setHandled(id, {
-              onAddItem: { rev },
-              onItem: { rev },
-            });
-            break;
-          default:
-            assertNever(state);
+              break;
+            default:
+              assertNever(state);
+          }
+        } catch (cError: unknown) {
+          error(
+            cError,
+            `Error processing item state "${state}" for item ${id}`
+          );
         }
-      } catch (err: unknown) {
-        error(err, `Error processing item state "${state}" for item ${id}`);
-      }
-    });
+      })
+    );
   }
 
   /**
-   * Do async stuff for initializing ourself since constructors are syncronous
+   * Do async stuff for initializing ourself since constructors are synchronous
    */
-  private async initialize() {
-    const { path, tree } = this;
+  private async _initialize() {
+    const { path, tree, itemsPath } = this;
     const conn = this.#conn;
 
     info('Ensuring %s exists', path);
     try {
       await conn.head({ path });
-    } catch (err) {
-      if (err.status === 403 || err.status === 404) {
+    } catch (cError: unknown) {
+      // @ts-expect-error darn errors
+      if (cError?.status === 403 || cError?.status === 404) {
         // Create it
         await conn.put({ path, tree, data: {} });
         trace('Created %s because it did not exist', path);
       } else {
-        error(err);
-        throw err;
+        error(cError);
+        throw cError;
       }
     }
 
@@ -608,35 +631,37 @@ export class ListWatch<Item = unknown> {
         path,
         tree,
       })) as GetResponse<List>;
-      //const items = Object.keys(list).filter((k) => !k.match(/^_/));
-      const items = getListItems(list, this.itemsPath);
+      // Const items = Object.keys(list).filter((k) => !k.match(/^_/));
+      const items = getListItems(list as DeepPartial<List>, itemsPath);
 
-      // ask for states of pre-existing items
+      // Ask for states of pre-existing items
       trace('Calling onNewList');
       const states = await this.#onNewList(items);
       // Set the states
       trace('Updating item states based on callback result');
-      await this.updateItemState(list, items, states);
+      await this._updateItemState(list, items, states);
     }
 
     // Setup watch on the path
     if (this.#resume) {
       trace('Resuming watch from rev %s', this.#meta.rev);
     }
+
     // Queue to handle changes in order
     const changeQueue = new PQueue({ concurrency: 1 });
+    // eslint-disable-next-line security/detect-non-literal-fs-filename
     this.#id = await conn.watch({
       path,
       rev: this.#resume ? this.#meta.rev : undefined,
       type: 'tree',
-      watchCallback: (changes) =>
+      watchCallback: async (changes) =>
         changeQueue.add(async () => {
           // Get root change?
           const rootChange = changes[0];
 
           // TODO: Better way than just looping through them all?
           await Bluebird.each(changes, async (change) => {
-            const { type, path: changePath, body, ...ctx } = change;
+            const { type, path: changePath, body, ...context } = change;
 
             if (body === null && type === 'delete' && changePath === '') {
               // The list itself was deleted
@@ -646,11 +671,11 @@ export class ListWatch<Item = unknown> {
               return;
             }
 
-            const rev = (body as Change['body'])._rev as string;
+            const rev = (body as Change['body'])?._rev;
 
             trace(change, 'Received change');
 
-            let itemsFound = !!changePath;
+            let itemsFound = Boolean(changePath);
             let listChange = body as DeepPartial<List>;
             try {
               // The actual change was to a descendant of the list
@@ -661,19 +686,20 @@ export class ListWatch<Item = unknown> {
                 // If it doesn't, it's probably to the list.
 
                 // Reconstruct change to list?
-                const changeObj = {};
+                const changeObject = {};
                 let isListChange = false;
-                if (this.itemsPath) {
-                  // just put true here for now to check if path matches
-                  pointer.set(changeObj, changePath, true);
-                  const pathmatches = JSONPath({
+                if (itemsPath) {
+                  // Just put true here for now to check if path matches
+                  pointer.set(changeObject, changePath, true);
+                  // eslint-disable-next-line new-cap
+                  const pathmatches = JSONPath<string[]>({
                     resultType: 'pointer',
-                    path: this.itemsPath,
-                    json: changeObj,
+                    path: itemsPath,
+                    json: changeObject,
                     preventEval: true,
                   });
                   if (pathmatches?.length === 0) {
-                    // if it does not match, this must be above the items
+                    // If it does not match, this must be above the items
                     isListChange = true;
                     trace(
                       'Have a write to the list under itemsPath rather than to any of the items'
@@ -681,46 +707,57 @@ export class ListWatch<Item = unknown> {
                   }
                 }
 
-                // now put the actual change body in place of the true
-                pointer.set(changeObj, changePath, body);
+                // Now put the actual change body in place of the true
+                pointer.set(changeObject, changePath, body);
                 // Find items involved in the change
-                const itemsChanged = getListItems(changeObj, this.itemsPath);
+                const itemsChanged = getListItems(changeObject, itemsPath);
                 // The change was to items of the list (or their descendants)
-                if (!isListChange && itemsChanged.length >= 1) {
-                  return Bluebird.map(itemsChanged, (item) => {
-                    const body = pointer.get(changeObj, item);
-                    // Make change start at item instead of the list
-                    const path = changePath.slice(item.length);
-                    const change: Change = {
-                      ...ctx,
-                      type,
-                      path,
-                      body,
-                    };
-                    // Check that it is a resource change?
-                    if (!body._rev) {
-                      warn(
-                        change,
-                        'Ignoring unexpected (as in the body does not have a _rev) change'
-                      );
-                      return;
-                    }
-                    return this.handleItemChange(item, change);
-                  });
-                } else {
-                  // The change is between the list and items
-                  // (multiple link levels)
-                  listChange = changeObj;
+                if (!isListChange && itemsChanged.length > 0) {
+                  return await Promise.all(
+                    itemsChanged.map((item) => {
+                      const itemBody: unknown = pointer.get(changeObject, item);
+                      // Make change start at item instead of the list
+                      const itemPath = changePath.slice(item.length);
+                      const itemChange: Change = {
+                        ...context,
+                        type,
+                        path: itemPath,
+                        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+                        body: itemBody as any,
+                      };
+                      // Check that it is a resource change?
+                      if (
+                        !(
+                          typeof itemBody === 'object' &&
+                          itemBody &&
+                          '_rev' in itemBody
+                        )
+                      ) {
+                        warn(
+                          itemChange,
+                          'Ignoring unexpected (as in the body does not have a _rev) change'
+                        );
+                        return;
+                      }
+
+                      return this._handleItemChange(item, itemChange);
+                    })
+                  );
                 }
+
+                // The change is between the list and items
+                // (multiple link levels)
+                listChange = changeObject;
               }
+
               trace(
                 'Change was to the list itself because changePath is empty, calling handleListChange'
               );
               // The change was to the list itself
               itemsFound =
-                (await this.handleListChange(listChange, type)) || itemsFound;
-            } catch (err: unknown) {
-              error(err, `Error processing change at ${path}, rev ${rev}`);
+                (await this._handleListChange(listChange, type)) || itemsFound;
+            } catch (cError: unknown) {
+              error(cError, `Error processing change at ${path}, rev ${rev}`);
             }
           });
 
@@ -728,7 +765,7 @@ export class ListWatch<Item = unknown> {
             trace(
               'Received change to root of list, updating handled rev in our _meta records'
             );
-            this.#meta.rev = (rootChange.body as Resource)?._rev + '';
+            this.#meta.rev = `${(rootChange.body as Resource)?._rev}`;
           }
         }),
     });
@@ -738,7 +775,9 @@ export class ListWatch<Item = unknown> {
 // Gross stuff to make TS handle optional second param for callback
 type ItemStateNoItemCB = (id: string) => Promise<ItemState>;
 function stateCBnoItem<Item>(
-  cb: ItemStateNoItemCB | NonNullable<Options<Item>['getItemState']>
-): cb is ItemStateNoItemCB {
-  return cb.length < 2;
+  callback: ItemStateNoItemCB | NonNullable<Options<Item>['getItemState']>
+): callback is ItemStateNoItemCB {
+  return callback.length < 2;
 }
+
+export { Options, ItemState } from './Options';

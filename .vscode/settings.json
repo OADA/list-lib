@@ -1,0 +1,37 @@
+{
+  "files.exclude": {
+    "*.tsbuildinfo": true,
+    "lib": true,
+    "*.log": true,
+    "tags.*": true,
+    "node_modules": true,
+    ".vim": true,
+    ".nvimlog": true,
+    "dist": true,
+    ".history": true,
+    ".dccache": true,
+    ".yarn": true,
+    ".pnp.*": true
+  },
+  "search.exclude": {
+    "*.tsbuildinfo": true,
+    "lib": true,
+    "*.log": true,
+    "tags.*": true,
+    "node_modules": true,
+    ".vim": true,
+    ".nvimlog": true,
+    "dist": true,
+    ".history": true,
+    ".dccache": true,
+    ".yarn": true,
+    ".pnp.*": true,
+    "**/.yarn": true,
+    "**/.pnp.*": true
+  },
+  "typescript.enablePromptUseWorkspaceTsdk": true,
+  "cSpell.words": ["ksuid", "sonarjs"],
+  "prettier.prettierPath": ".yarn/sdks/prettier/index.js",
+  "typescript.tsdk": ".yarn/sdks/typescript/lib",
+  "eslint.nodePath": ".yarn/sdks"
+}

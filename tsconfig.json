@@ -13,5 +13,5 @@
     "declarationMap": true,
     "stripInternal": true
   },
-  "exclude": ["lib"]
+  "exclude": ["lib", "**/*.spec.ts"]
 }

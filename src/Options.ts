@@ -1,17 +1,34 @@
-import type { TypeAssert } from '@oada/types';
-//import type { Change } from '@oada/types/oada/change/v2';
+/**
+ * @license
+ * Copyright 2021 Open Ag Data Alliance
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 // TODO: Fix this
-import type { Change } from './';
+// Import type { Change } from '@oada/types/oada/change/v2';
+
+import type { Change, TypeAssert } from './';
 
 import type { OADAClient } from '@oada/client';
 
 /**
- * Type that can be either T or a Promise which resovles to T
+ * Type that can be either T or a Promise which resolves to T
  */
 type AllowPromise<T> = T | Promise<T>;
 
 /**
- * The type for the object given to the construtor
+ * The type for the object given to the constructor
  *
  * @public
  * @typeParam Item  The type of the items linked in the list
@@ -36,7 +53,7 @@ export interface Options<Item> {
    *
    * @see path
    */
-  tree?: object;
+  tree?: Record<string, unknown>;
   /**
    *, 'data'> A persistent name/id for this instance (can just be random string)
    *
@@ -44,7 +61,7 @@ export interface Options<Item> {
    */
   name: string;
   /**
-   * true: "resume" change feed for list from last processed rev
+   * True: "resume" change feed for list from last processed rev
    * false: just start from current state of the list
    *
    * @todo should default be true instead??

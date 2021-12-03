@@ -31,7 +31,7 @@ await watch.stop()
 ## Item types
 
 While the `ListWatch` class is generic,
-you will typically not want to specify a type paramter in your code.
+you will typically not want to specify a type parameter in your code.
 If you supply an `assertItem` function,
 the type of `Item` will be inferred from it.
 This will help minimize runtime errors
@@ -40,7 +40,7 @@ and in the case of no assertion the library defaults `Item` to `unknown`.
 
 ## Rechecking items
 
-In more advanced use-cases, you might want to prompt the libray to re-check
+In more advanced use-cases, you might want to prompt the library to re-check
 all the items in the list.
 For this reason, `ListWatch` has a `forceRecheck` method.
 Calling this will cause the library to check all the current list items.

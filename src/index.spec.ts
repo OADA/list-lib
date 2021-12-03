@@ -1,14 +1,30 @@
-import test from 'ava';
-import sinon from 'sinon';
-import Bluebird from 'bluebird';
+/**
+ * @license
+ * Copyright 2021 Open Ag Data Alliance
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 
-//import { Change } from '@oada/types/oada/change/v2';
+import Bluebird from 'bluebird';
+import { spy } from 'sinon';
+import test from 'ava';
+
 // TODO: Fix this
-import { Change } from './';
+// Import { Change } from '@oada/types/oada/change/v2';
 
 import { createStub } from './conn-stub';
 
-import { ListWatch, Tree, pathFromTree } from './';
+import { Change, ListWatch, Tree, pathFromTree } from './';
 
 const name = 'oada-list-lib-test';
 
@@ -20,6 +36,7 @@ test('it should create JSON Path from simple OADA tree', (t) => {
       _type: 'application/vnd.oada.bookmarks.1+json',
       _rev: 0,
       thing: {
+        // eslint-disable-next-line sonarjs/no-duplicate-string
         _type: 'application/json',
         _rev: 0,
         abc: {
@@ -97,6 +114,7 @@ test('it should WATCH given path', async (t) => {
   const conn = createStub();
   const path = '/bookmarks/foo/bar';
 
+  // eslint-disable-next-line no-new
   new ListWatch({ path, name, conn });
   t.plan(1);
 
@@ -127,22 +145,23 @@ test.todo('it should reconnect WATCH');
 test('it should detect new item', async (t) => {
   const conn = createStub();
   // A Change from adding an item to a list
-  // TODO: Better way to do this test without actually runnig oada?
+  // TODO: Better way to do this test without actually running oada?
   const path = '/bookmarks';
   const id = 'resources/foo';
-  // @ts-ignore
+  // @ts-expect-error test
   conn.get.resolves({ data: { _id: id } });
   const change: Change[] = [
     {
       resource_id: 'resources/default:resources_bookmarks_321',
       path: '',
       body: {
+        // eslint-disable-next-line no-secrets/no-secrets
         '1e6XB0Hy7XJICbi3nMzCtl4QLpC': {
           _id: id,
         },
         '_meta': {
           modifiedBy: 'users/default:users_sam_321',
-          modified: 1593642877.725,
+          modified: 1_593_642_877.725,
           _rev: 4,
         },
         '_rev': 4,
@@ -150,48 +169,50 @@ test('it should detect new item', async (t) => {
       type: 'merge',
     },
   ];
-  // @ts-ignore
+  // @ts-expect-error test
   conn.get.resolves({ data: { _rev: 4 } });
 
-  const opts = {
+  const options = {
     path,
     name,
     conn,
     // Create spies to see which callbacks run
-    onAddItem: sinon.spy(),
-    onChangeItem: sinon.spy(),
-    onItem: sinon.spy(),
-    onRemoveItem: sinon.spy(),
+    onAddItem: spy(),
+    onChangeItem: spy(),
+    onItem: spy(),
+    onRemoveItem: spy(),
   };
 
-  new ListWatch(opts);
+  // eslint-disable-next-line no-new
+  new ListWatch(options);
   // TODO: How to do this right in ava?
   await Bluebird.delay(delay);
 
-  const cb = conn.watch.firstCall?.args?.[0]?.watchCallback as (
+  const callback = conn.watch.firstCall?.args?.[0]?.watchCallback as (
     change: readonly Change[]
   ) => Promise<void>;
-  await cb(change);
+  await callback(change);
 
-  t.is(opts.onAddItem.callCount, 1);
-  t.is(opts.onItem.callCount, 1);
-  t.is(opts.onChangeItem.callCount, 0);
-  t.is(opts.onRemoveItem.callCount, 0);
+  t.is(options.onAddItem.callCount, 1);
+  t.is(options.onItem.callCount, 1);
+  t.is(options.onChangeItem.callCount, 0);
+  t.is(options.onRemoveItem.callCount, 0);
 });
 test('it should detect removed item', async (t) => {
   const conn = createStub();
   // A Change from adding an item to a list
-  // TODO: Better way to do this test without actually runnig oada?
+  // TODO: Better way to do this test without actually running oada?
   const path = '/bookmarks';
   const change: Change[] = [
     {
       resource_id: 'resources/default:resources_bookmarks_321',
       path: '',
       body: {
+        // eslint-disable-next-line no-secrets/no-secrets, unicorn/no-null
         '1e6XB0Hy7XJICbi3nMzCtl4QLpC': null,
         '_meta': {
           modifiedBy: 'users/default:users_sam_321',
-          modified: 1593642877.725,
+          modified: 1_593_642_877.725,
           _rev: 4,
         },
         '_rev': 4,
@@ -200,29 +221,30 @@ test('it should detect removed item', async (t) => {
     },
   ];
 
-  const opts = {
+  const options = {
     path,
     name,
     conn,
     // Create spies to see which callbacks run
-    onAddItem: sinon.spy(),
-    onChangeItem: sinon.spy(),
-    onItem: sinon.spy(),
-    onRemoveItem: sinon.spy(),
+    onAddItem: spy(),
+    onChangeItem: spy(),
+    onItem: spy(),
+    onRemoveItem: spy(),
   };
 
-  new ListWatch(opts);
+  // eslint-disable-next-line no-new
+  new ListWatch(options);
   // TODO: How to do this right in ava?
   await Bluebird.delay(delay);
 
-  const cb = conn.watch.firstCall?.args?.[0]?.watchCallback as (
+  const callback = conn.watch.firstCall?.args?.[0]?.watchCallback as (
     change: readonly Change[]
   ) => Promise<void>;
-  await cb(change);
+  await callback(change);
 
-  t.is(opts.onAddItem.callCount, 0);
-  t.is(opts.onItem.callCount, 0);
-  t.is(opts.onChangeItem.callCount, 0);
-  t.is(opts.onRemoveItem.callCount, 1);
+  t.is(options.onAddItem.callCount, 0);
+  t.is(options.onItem.callCount, 0);
+  t.is(options.onChangeItem.callCount, 0);
+  t.is(options.onRemoveItem.callCount, 1);
 });
 test.todo('it should detect modified item');
