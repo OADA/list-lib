@@ -1,17 +1,26 @@
 {
   "extends": "@tsconfig/node12",
+  "ts-node": {
+    "files": true
+  },
   "compilerOptions": {
+    "declaration": true,
     "rootDir": "src",
     "outDir": "lib",
+    "stripInternal": true,
+    "importHelpers": true,
+    "alwaysStrict": true,
     "strict": true,
-    "esModuleInterop": true,
+    "importsNotUsedAsValues": "error",
+    "noUncheckedIndexedAccess": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
+    "noImplicitThis": true,
     "noImplicitAny": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
     "sourceMap": true,
-    "declaration": true,
-    "declarationMap": true,
-    "stripInternal": true
+    "forceConsistentCasingInFileNames": true
   },
-  "exclude": ["lib", "**/*.spec.ts"]
+  "exclude": ["lib", "**/*.spec.ts", "**/*-stub.ts"]
 }

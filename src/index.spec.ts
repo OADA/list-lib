@@ -15,14 +15,14 @@
  * limitations under the License.
  */
 
-import Bluebird from 'bluebird';
+import { setTimeout } from 'isomorphic-timers-promises';
 import { spy } from 'sinon';
 import test from 'ava';
 
 // TODO: Fix this
 // Import { Change } from '@oada/types/oada/change/v2';
 
-import { createStub } from './conn-stub';
+import { createStub, emptyResponse } from './conn-stub';
 
 import { Change, ListWatch, Tree, pathFromTree } from './';
 
@@ -119,26 +119,9 @@ test('it should WATCH given path', async (t) => {
   t.plan(1);
 
   // TODO: How to do this right in ava?
-  await Bluebird.delay(delay);
+  await setTimeout(delay);
 
   t.is(conn.watch.firstCall?.args?.[0]?.path, path);
-});
-test('it should UNWATCH on stop()', async (t) => {
-  const conn = createStub();
-  const path = '/bookmarks/foo/bar';
-  const id = 'foobar';
-
-  conn.watch.resolves(id);
-
-  const watch = new ListWatch({ path, name, conn });
-
-  // TODO: How to do this right in ava?
-  await Bluebird.delay(delay);
-
-  await watch.stop();
-
-  t.is(conn.unwatch.callCount, 1);
-  t.is(conn.unwatch.firstCall?.args?.[0], id);
 });
 test.todo('it should reconnect WATCH');
 
@@ -183,15 +166,20 @@ test('it should detect new item', async (t) => {
     onRemoveItem: spy(),
   };
 
+  async function* changes() {
+    yield change;
+  }
+
+  // @ts-expect-error bs from deprecated v2 API
+  conn.watch.resolves({
+    ...emptyResponse,
+    changes: changes(),
+  });
+
   // eslint-disable-next-line no-new
   new ListWatch(options);
   // TODO: How to do this right in ava?
-  await Bluebird.delay(delay);
-
-  const callback = conn.watch.firstCall?.args?.[0]?.watchCallback as (
-    change: readonly Change[]
-  ) => Promise<void>;
-  await callback(change);
+  await setTimeout(delay);
 
   t.is(options.onAddItem.callCount, 1);
   t.is(options.onItem.callCount, 1);
@@ -232,15 +220,20 @@ test('it should detect removed item', async (t) => {
     onRemoveItem: spy(),
   };
 
+  async function* changes() {
+    yield change;
+  }
+
+  // @ts-expect-error bs from deprecated v2 API
+  conn.watch.resolves({
+    ...emptyResponse,
+    changes: changes(),
+  });
+
   // eslint-disable-next-line no-new
   new ListWatch(options);
   // TODO: How to do this right in ava?
-  await Bluebird.delay(delay);
-
-  const callback = conn.watch.firstCall?.args?.[0]?.watchCallback as (
-    change: readonly Change[]
-  ) => Promise<void>;
-  await callback(change);
+  await setTimeout(delay);
 
   t.is(options.onAddItem.callCount, 0);
   t.is(options.onItem.callCount, 0);

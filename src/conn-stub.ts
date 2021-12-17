@@ -15,10 +15,11 @@
  * limitations under the License.
  */
 
-import { ConnectionResponse, OADAClient } from '@oada/client';
+import { Change, ConnectionResponse, OADAClient } from '@oada/client';
+import type { WatchResponse } from '@oada/client/dist/client';
 import { createStubInstance } from 'sinon';
 
-const emptyResp: ConnectionResponse = {
+export const emptyResponse: ConnectionResponse = {
   requestId: 'testid',
   status: 200,
   statusText: 'OK',
@@ -32,13 +33,26 @@ const emptyResp: ConnectionResponse = {
 export function createStub() {
   const conn = createStubInstance(OADAClient);
 
-  conn.get.resolves(emptyResp);
-  conn.head.resolves(emptyResp);
-  conn.put.resolves(emptyResp);
-  conn.post.resolves(emptyResp);
-  conn.delete.resolves(emptyResp);
-  conn.watch.resolves('watchid');
-  conn.unwatch.resolves(emptyResp);
+  conn.get.resolves(emptyResponse);
+  conn.head.resolves(emptyResponse);
+  conn.put.resolves(emptyResponse);
+  conn.post.resolves(emptyResponse);
+  conn.delete.resolves(emptyResponse);
+  const watch: WatchResponse<readonly Change[]> = {
+    ...emptyResponse,
+    changes: (async function* () {
+      const change: Change = {
+        type: 'merge',
+        path: '',
+        resource_id: 'resources/foo',
+        body: { _rev: 2 },
+      };
+      yield [change];
+    })(),
+  };
+  // @ts-expect-error stuff
+  conn.watch.resolves(watch);
+  conn.unwatch.resolves(emptyResponse);
 
   return conn;
 }

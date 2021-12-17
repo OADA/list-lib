@@ -1,6 +1,6 @@
 {
   "name": "@oada/list-lib",
-  "version": "2.1.11",
+  "version": "2.2.0",
   "description": "Library for processing items in an OADA list",
   "main": "lib/index.js",
   "typings": "lib/index.d.ts",
@@ -9,7 +9,7 @@
     "url": "https://github.com/OADA/list-lib.git"
   },
   "author": "Alex Layton <alex@layton.in>",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "bugs": {
     "url": "https://github.com/OADA/list-lib/issues"
   },
@@ -32,29 +32,28 @@
     "quoteProps": "consistent"
   },
   "ava": {
-    "typescript": {
-      "compile": "tsc",
-      "rewritePaths": {
-        "src/": "lib/"
-      }
-    }
+    "extensions": [
+      "ts"
+    ],
+    "require": [
+      "ts-node/register"
+    ]
   },
   "devDependencies": {
     "@ava/typescript": "^3.0.1",
     "@tsconfig/node12": "^1.0.9",
-    "@types/bluebird": "^3.5.36",
     "@types/clone-deep": "^4.0.1",
     "@types/debug": "^4.1.7",
     "@types/json-pointer": "^1.0.31",
     "@types/jsonpath-plus": "^5.0.2",
-    "@types/node": "^16.11.11",
+    "@types/node": "^16.11.14",
     "@types/object-assign-deep": "^0.4.0",
     "@types/sinon": "^10.0.6",
-    "@typescript-eslint/eslint-plugin": "^5.5.0",
-    "@typescript-eslint/parser": "^5.5.0",
-    "@yarnpkg/sdks": "^2.5.1-rc.4",
+    "@typescript-eslint/eslint-plugin": "^5.7.0",
+    "@typescript-eslint/parser": "^5.7.0",
+    "@yarnpkg/sdks": "^2.5.1-rc.6",
     "ava": "^3.15.0",
-    "eslint": "^8.3.0",
+    "eslint": "^7.32.0",
     "eslint-config-prettier": "^8.3.0",
     "eslint-config-xo": "^0.39.0",
     "eslint-config-xo-typescript": "^0.47.1",
@@ -78,19 +77,20 @@
     "eslint-plugin-security": "^1.4.0",
     "eslint-plugin-sonarjs": "^0.11.0",
     "eslint-plugin-unicorn": "^39.0.0",
-    "prettier": "^2.5.0",
+    "prettier": "^2.5.1",
     "sinon": "^12.0.1",
-    "typescript": "^4.3.5"
+    "ts-node": "^10.4.0",
+    "typescript": "^4.5.4"
   },
   "dependencies": {
-    "@oada/client": "^2.6.5",
+    "@oada/client": "^3.0.3",
     "@oada/types": "^1.7.0",
-    "bluebird": "^3.7.2",
     "clone-deep": "^4.0.1",
     "debug": "^4.3.3",
+    "isomorphic-timers-promises": "^1.0.1",
     "json-pointer": "^0.6.1",
     "jsonpath-plus": "^6.0.1",
-    "p-queue": "^6.6.2"
+    "tslib": "^2.3.1"
   },
   "packageManager": "yarn@3.1.1"
 }

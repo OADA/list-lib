@@ -3,3 +3,8 @@ lib
 
 yarn.lock
 tags*
+.history
+.vim
+
+.yarn
+.pnp.*

@@ -16,15 +16,18 @@
  */
 
 import { join } from 'node:path';
+import { setInterval } from 'isomorphic-timers-promises';
 
-import Bluebird from 'bluebird';
 import clone from 'clone-deep';
+import debug from 'debug';
 import pointer from 'json-pointer';
 
-import { Conn } from './Options';
+import type { Json } from '@oada/client';
 
-import debug from 'debug';
+import type { Conn } from './Options';
+
 const trace = debug('oada-list-lib#metadata:trace');
+const error = debug('oada-list-lib#metadata:error');
 
 /**
  * Record of a successfully handled list item
@@ -64,15 +67,13 @@ export class Metadata {
    * The rev we left off on
    */
   #rev?: string;
+  #revDirty = false;
 
   // Where to store state
   #conn?;
   #path;
   #tree?: Record<string, unknown>;
-  #timeout: NodeJS.Timeout;
-  // Init stuff?
-  #done!: (error?: unknown) => void;
-  #wait: Promise<unknown>;
+  #initialized = false;
 
   constructor({
     conn,
@@ -110,23 +111,38 @@ export class Metadata {
       });
     }
 
-    // Console.dir(this.#tree, { depth: null });
-    this.#wait = Bluebird.fromCallback((done) => {
-      this.#done = done;
-    });
     // TODO: Use timeouts for all updates?
-    this.#timeout = setTimeout(async () => {
-      await this.#wait;
-      trace('Recording rev %s', this.#rev);
-      this.#wait = Promise.resolve(
-        this.#conn?.put({
-          path: this.#path,
-          tree: this.#tree,
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-          data: { rev: this.#rev } as any,
-        })
-      );
-    }, 100);
+    const revUpdateInterval = setInterval(100);
+    const updateRevs = async () => {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      for await (const _ of revUpdateInterval) {
+        trace(
+          'rev update interval %d, %s, %s',
+          this.#rev,
+          this.#initialized,
+          this.#revDirty
+        );
+        if (!this.#initialized || !this.#revDirty) {
+          continue;
+        }
+
+        trace('Recording rev %s', this.#rev);
+        const data: Json = { rev: this.#rev };
+        this.#revDirty = false;
+        try {
+          await this.#conn?.put({
+            path: this.#path,
+            tree: this.#tree,
+            data,
+          });
+        } catch (cError: unknown) {
+          error(cError, 'Failed to update rev');
+          this.#revDirty = true;
+        }
+      }
+    };
+
+    void updateRevs();
   }
 
   get rev(): string {
@@ -141,7 +157,7 @@ export class Metadata {
 
     trace(`Updating local rev to ${rev}`);
     this.#rev = rev;
-    this.#timeout.refresh();
+    this.#revDirty = true;
   }
 
   /**
@@ -154,13 +170,12 @@ export class Metadata {
     if (item) {
       // Merge with current info
 
-      const data: any = {};
+      const data: Json = {};
       pointer.set(data, `/handled${path}`, item);
 
       await this.#conn?.put({
         path: this.#path,
         tree: this.#tree,
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         data,
       });
     } else {
@@ -197,48 +212,43 @@ export class Metadata {
    * @TODO I hate needing to call init...
    */
   public async init(): Promise<boolean> {
-    try {
-      if (!this.#conn) {
-        this.#rev = undefined;
-        this.#done();
-        return false;
-      }
+    if (!this.#conn) {
+      this.#rev = undefined;
+      this.#initialized = true;
+      return false;
+    }
 
-      // Try to get our metadata about this list
-      try {
-        const { data: rev } = await this.#conn.get({
-          path: join(this.#path, 'rev'),
-        });
-        this.#rev = rev as string;
-        this.#done();
-        return true;
-      } catch {
-        // Create our metadata?
-        const {
-          headers: { 'content-location': location },
-        } = await this.#conn.post({
-          path: '/resources/',
-          data: {},
-        });
-        await this.#conn.put({
-          path: this.#path,
-          tree: this.#tree,
-          data: { _id: location.slice(1) },
-        });
-        await this.#conn.put({
-          path: this.#path,
-          tree: this.#tree,
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-          data: {
-            rev: this.#rev,
-          } as any,
-        });
-        this.#done();
-        return false;
-      }
-    } catch (error: unknown) {
-      this.#done(error);
-      throw error;
+    // Try to get our metadata about this list
+    try {
+      const { data: rev } = await this.#conn.get({
+        path: join(this.#path, 'rev'),
+      });
+      this.#rev = rev as string;
+      this.#initialized = true;
+      return true;
+    } catch {
+      // Create our metadata?
+      const {
+        headers: { 'content-location': location },
+      } = await this.#conn.post({
+        path: '/resources/',
+        data: {},
+      });
+      await this.#conn.put({
+        path: this.#path,
+        tree: this.#tree,
+        data: { _id: location?.slice(1) },
+      });
+      const data: Json = {
+        rev: this.#rev,
+      };
+      await this.#conn.put({
+        path: this.#path,
+        tree: this.#tree,
+        data,
+      });
+      this.#initialized = true;
+      return false;
     }
   }
 }

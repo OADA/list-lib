@@ -15,17 +15,17 @@
  * limitations under the License.
  */
 
-import Bluebird from 'bluebird';
+import { setTimeout } from 'isomorphic-timers-promises';
 import { spy } from 'sinon';
 import test from 'ava';
 
 // TODO: Fix this
 // Import { Change } from '@oada/types/oada/change/v2';
+import type { PUTRequest } from '@oada/client';
 
-import { createStub } from './conn-stub';
+import { createStub, emptyResponse } from './conn-stub';
 
 import { Change, ListWatch } from './';
-import { PUTRequest } from '@oada/client';
 
 const name = 'oada-list-lib-test';
 
@@ -54,7 +54,7 @@ test('should resume from last rev', async (t) => {
   // eslint-disable-next-line no-new
   new ListWatch(options);
   // TODO: How to do this right in ava?
-  await Bluebird.delay(5);
+  await setTimeout(5);
 
   t.is(conn.watch.firstCall?.args?.[0]?.rev, rev);
 });
@@ -99,17 +99,22 @@ test('should persist rev to _meta', async (t) => {
   // @ts-expect-error test
   conn.get.resolves({ data: {} });
 
+  async function* changes() {
+    yield change;
+  }
+
+  // @ts-expect-error bs from deprecated v2 API
+  conn.watch.resolves({
+    ...emptyResponse,
+    changes: changes(),
+  });
+
   // eslint-disable-next-line no-new
   new ListWatch(options);
   // TODO: How to do this right in ava?
-  await Bluebird.delay(5);
+  await setTimeout(5);
 
-  const callback = conn.watch.firstCall?.args?.[0]?.watchCallback as (
-    change: readonly Change[]
-  ) => Promise<void>;
-  await callback(change);
-
-  await Bluebird.delay(500);
+  await setTimeout(500);
 
   t.assert(
     conn.put.calledWithMatch({

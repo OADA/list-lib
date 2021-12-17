@@ -15,23 +15,22 @@
  * limitations under the License.
  */
 
-/* eslint-disable unicorn/no-await-expression-member */
-
 import { join } from 'node:path';
 
-import Bluebird from 'bluebird';
 import { JSONPath } from 'jsonpath-plus';
-import PQueue from 'p-queue';
 import debug from 'debug';
 import pointer from 'json-pointer';
 
-import type { ConnectionResponse } from '@oada/client';
+import type { Change as ClientChange, ConnectionResponse } from '@oada/client';
 import type { Link } from '@oada/types/oada/link/v1';
 import type { Resource } from '@oada/types/oada/resource';
 import type V2Changes from '@oada/types/oada/change/v2';
 
 import { ItemState, Options } from './Options';
 import { Metadata } from './Metadata';
+import type { Tree } from './tree';
+
+export type { Tree } from './tree';
 
 const info = debug('oada-list-lib:info');
 const warn = debug('oada-list-lib:warn');
@@ -112,17 +111,6 @@ function getListItems(list: DeepPartial<List>, path: string) {
     (p) => !p.includes('/_')
   );
 }
-
-/**
- * OADA Tree
- *
- * @internal
- */
-export type Tree = {
-  _type?: string;
-  _rev?: number;
-  // eslint-disable-next-line @typescript-eslint/consistent-indexed-object-style
-} & { [key: string]: Tree };
 
 /**
  * Generates an equivalent JSON Path from an OADA Tree object
@@ -209,7 +197,7 @@ export class ListWatch<Item = unknown> {
 
   #resume;
   #conn;
-  #id?: string;
+  #watch;
   #assertItem;
 
   // _meta stuff
@@ -268,7 +256,7 @@ export class ListWatch<Item = unknown> {
       // Assume items are at the leaves of tree
       this.itemsPath = pathFromTree(tree as Tree, path);
     } else {
-      // Assume flat list
+      // Assume a flat list
       this.itemsPath = '$.*';
     }
 
@@ -280,7 +268,7 @@ export class ListWatch<Item = unknown> {
         Promise.all(
           ids.map(async (id) => {
             try {
-              return await this._getItemState(id);
+              return await this.#handleItemState(id);
             } catch (cError: unknown) {
               error(cError, 'Error getting item state');
               throw cError;
@@ -297,7 +285,7 @@ export class ListWatch<Item = unknown> {
       tree,
       name,
     });
-    this._initialize().catch(error);
+    this.#watch = this.#initialize();
   }
 
   /**
@@ -334,9 +322,9 @@ export class ListWatch<Item = unknown> {
           }
 
           // Ask lib user for state of this item
-          const state = await this._getItemState(id);
+          const state = await this.#handleItemState(id);
 
-          await this._updateItemState(list, id, state);
+          await this.#updateItemState(list, id, state);
         } catch (cError: unknown) {
           error(cError);
         }
@@ -348,7 +336,11 @@ export class ListWatch<Item = unknown> {
    * Clean up metadata and unwatch list
    */
   public async stop() {
-    await this.#conn.unwatch(this.#id!);
+    const watch = await this.#watch;
+    if (watch.return) {
+      await watch.return();
+    }
+
     await this.persistMeta();
     // This.#meta.stop();
   }
@@ -366,7 +358,7 @@ export class ListWatch<Item = unknown> {
    *
    * This handles fetching the Item before invoking the callback if needed
    */
-  private async _getItemState(id: string): Promise<ItemState> {
+  async #handleItemState(id: string): Promise<ItemState> {
     // Needed because TS is weird about asserts...
     const assertItem: TypeAssert<Item> = this.#assertItem;
 
@@ -381,7 +373,7 @@ export class ListWatch<Item = unknown> {
     return this.#getItemState(id);
   }
 
-  private async _handleNewItem(rev: string, id: string, item: Resource) {
+  async #handleNewItem(rev: string, id: string, item: Resource) {
     const { path } = this;
     // Needed because TS is weird about asserts...
     const assertItem: TypeAssert<Item> = this.#assertItem;
@@ -390,9 +382,10 @@ export class ListWatch<Item = unknown> {
     const { _rev } = item;
     assertItem(item);
 
+    const handled = await this.#meta.handled(id);
     try {
       // Double check this is a new item?
-      if (!(await this.#meta.handled(id))?.onAddItem) {
+      if (!handled?.onAddItem) {
         await (this.#onAddItem && this.#onAddItem(item, id));
         await this.#meta.setHandled(id, { onAddItem: { rev: `${_rev}` } });
       }
@@ -403,16 +396,14 @@ export class ListWatch<Item = unknown> {
       // or will the feed have one??
 
       // Double check this item is actually newer than last time
-      if (
-        Number(_rev) > Number((await this.#meta.handled(id))?.onItem?.rev ?? 0)
-      ) {
+      if (Number(_rev) > Number(handled?.onItem?.rev ?? 0)) {
         await (this.#onItem && this.#onItem(item, id));
         await this.#meta.setHandled(id, { onItem: { rev: `${_rev}` } });
       }
     }
   }
 
-  private async _handleItemChange(id: string, change: Change) {
+  async #handleItemChange(id: string, change: Change) {
     const { path } = this;
     const conn = this.#conn;
     const rev = change.body?._rev;
@@ -420,10 +411,9 @@ export class ListWatch<Item = unknown> {
     // TODO: How best to handle change to a descendant of an item?
     info('Detected change to item %s in %s, rev %s', id, path, rev);
 
-    const { _rev } = change.body as Resource;
     try {
       await (this.#onChangeItem && this.#onChangeItem(change, id));
-      await this.#meta.setHandled(id, { onChangeItem: { rev: `${_rev}` } });
+      await this.#meta.setHandled(id, { onChangeItem: { rev: `${rev}` } });
     } finally {
       if (this.#onItem) {
         // Needed because TS is weird about asserts...
@@ -434,12 +424,12 @@ export class ListWatch<Item = unknown> {
         });
         assertItem(item);
         await this.#onItem(item, id);
-        await this.#meta.setHandled(id, { onItem: { rev: `${_rev}` } });
+        await this.#meta.setHandled(id, { onItem: { rev: `${rev}` } });
       }
     }
   }
 
-  private async _handleListChange(
+  async #handleListChange(
     list: DeepPartial<List>,
     type: Change['type']
   ): Promise<boolean> {
@@ -470,7 +460,7 @@ export class ListWatch<Item = unknown> {
                   //                path: join(path, id),
                   path: `/${id}`,
                 })) as GetResponse<Resource>;
-                await this._handleNewItem(`${rev}`, id, item);
+                await this.#handleNewItem(`${rev}`, id, item);
               } else {
                 // TODO: What should we do now??
                 trace(
@@ -540,7 +530,7 @@ export class ListWatch<Item = unknown> {
    *
    * @see ItemState
    */
-  private async _updateItemState(
+  async #updateItemState(
     list: List,
     ids: string | readonly string[],
     states: ItemState | readonly ItemState[]
@@ -548,11 +538,13 @@ export class ListWatch<Item = unknown> {
     const { path } = this;
     const { rev } = this.#meta;
 
-    const _ids = Array.isArray(ids) ? ids : [ids];
-    const _states = (Array.isArray(states) ? states : [states]) as ItemState[];
+    const idArray = Array.isArray(ids) ? ids : [ids];
+    const stateArray = (
+      Array.isArray(states) ? states : [states]
+    ) as readonly ItemState[];
     await Promise.all(
-      _ids.map(async (id, index) => {
-        const state = _states[Number(index)];
+      idArray.map(async (id, index) => {
+        const state = stateArray[Number(index)]!;
         try {
           switch (state) {
             case ItemState.New:
@@ -560,7 +552,7 @@ export class ListWatch<Item = unknown> {
                 const { data: item } = (await this.#conn.get({
                   path: join(path, id),
                 })) as GetResponse<Resource>;
-                await this._handleNewItem(`${list._rev}`, id, item);
+                await this.#handleNewItem(`${list._rev}`, id, item);
               }
 
               break;
@@ -573,10 +565,9 @@ export class ListWatch<Item = unknown> {
                   resource_id: pointer.get(list, id)._id as string,
                   path: '',
                   type: 'merge',
-                  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-                  body: item as any,
+                  body: item as Resource,
                 };
-                await this._handleItemChange(id, change);
+                await this.#handleItemChange(id, change);
               }
 
               break;
@@ -604,7 +595,7 @@ export class ListWatch<Item = unknown> {
   /**
    * Do async stuff for initializing ourself since constructors are synchronous
    */
-  private async _initialize() {
+  async #initialize() {
     const { path, tree, itemsPath } = this;
     const conn = this.#conn;
 
@@ -639,7 +630,7 @@ export class ListWatch<Item = unknown> {
       const states = await this.#onNewList(items);
       // Set the states
       trace('Updating item states based on callback result');
-      await this._updateItemState(list, items, states);
+      await this.#updateItemState(list, items, states);
     }
 
     // Setup watch on the path
@@ -647,128 +638,138 @@ export class ListWatch<Item = unknown> {
       trace('Resuming watch from rev %s', this.#meta.rev);
     }
 
-    // Queue to handle changes in order
-    const changeQueue = new PQueue({ concurrency: 1 });
     // eslint-disable-next-line security/detect-non-literal-fs-filename
-    this.#id = await conn.watch({
+    const { changes } = await conn.watch({
       path,
       rev: this.#resume ? this.#meta.rev : undefined,
       type: 'tree',
-      watchCallback: async (changes) =>
-        changeQueue.add(async () => {
-          // Get root change?
-          const rootChange = changes[0];
-
-          // TODO: Better way than just looping through them all?
-          await Bluebird.each(changes, async (change) => {
-            const { type, path: changePath, body, ...context } = change;
-
-            if (body === null && type === 'delete' && changePath === '') {
-              // The list itself was deleted
-              warn('Detected delete of list %s', path);
-
-              await this.#onDeleteList();
-              return;
-            }
-
-            const rev = (body as Change['body'])?._rev;
-
-            trace(change, 'Received change');
-
-            let itemsFound = Boolean(changePath);
-            let listChange = body as DeepPartial<List>;
-            try {
-              // The actual change was to a descendant of the list
-              if (changePath) {
-                // To decide if this change was to the list or to an item,
-                // need to check if itemsPath matches the changePath:
-                // if it does, it is to an item.
-                // If it doesn't, it's probably to the list.
-
-                // Reconstruct change to list?
-                const changeObject = {};
-                let isListChange = false;
-                if (itemsPath) {
-                  // Just put true here for now to check if path matches
-                  pointer.set(changeObject, changePath, true);
-                  // eslint-disable-next-line new-cap
-                  const pathmatches = JSONPath<string[]>({
-                    resultType: 'pointer',
-                    path: itemsPath,
-                    json: changeObject,
-                    preventEval: true,
-                  });
-                  if (pathmatches?.length === 0) {
-                    // If it does not match, this must be above the items
-                    isListChange = true;
-                    trace(
-                      'Have a write to the list under itemsPath rather than to any of the items'
-                    );
-                  }
-                }
-
-                // Now put the actual change body in place of the true
-                pointer.set(changeObject, changePath, body);
-                // Find items involved in the change
-                const itemsChanged = getListItems(changeObject, itemsPath);
-                // The change was to items of the list (or their descendants)
-                if (!isListChange && itemsChanged.length > 0) {
-                  return await Promise.all(
-                    itemsChanged.map((item) => {
-                      const itemBody: unknown = pointer.get(changeObject, item);
-                      // Make change start at item instead of the list
-                      const itemPath = changePath.slice(item.length);
-                      const itemChange: Change = {
-                        ...context,
-                        type,
-                        path: itemPath,
-                        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-                        body: itemBody as any,
-                      };
-                      // Check that it is a resource change?
-                      if (
-                        !(
-                          typeof itemBody === 'object' &&
-                          itemBody &&
-                          '_rev' in itemBody
-                        )
-                      ) {
-                        warn(
-                          itemChange,
-                          'Ignoring unexpected (as in the body does not have a _rev) change'
-                        );
-                        return;
-                      }
-
-                      return this._handleItemChange(item, itemChange);
-                    })
-                  );
-                }
-
-                // The change is between the list and items
-                // (multiple link levels)
-                listChange = changeObject;
-              }
-
-              trace(
-                'Change was to the list itself because changePath is empty, calling handleListChange'
-              );
-              // The change was to the list itself
-              itemsFound =
-                (await this._handleListChange(listChange, type)) || itemsFound;
-            } catch (cError: unknown) {
-              error(cError, `Error processing change at ${path}, rev ${rev}`);
-            }
-          });
-
-          if (this.#resume) {
-            trace(
-              'Received change to root of list, updating handled rev in our _meta records'
-            );
-            this.#meta.rev = `${(rootChange.body as Resource)?._rev}`;
-          }
-        }),
     });
+
+    void this.#handleChangeFeed(changes);
+    return changes;
+  }
+
+  async #handleChangeFeed(
+    watch: AsyncIterable<ReadonlyArray<Readonly<ClientChange>>>
+  ): Promise<never> {
+    const { path, itemsPath } = this;
+
+    for await (const changes of watch) {
+      // Get root change?
+      const rootChange = changes[0];
+
+      // TODO: Better way than just looping through them all?
+      for (const change of changes) {
+        const { type, path: changePath, body, ...context } = change;
+
+        if (body === null && type === 'delete' && changePath === '') {
+          // The list itself was deleted
+          warn('Detected delete of list %s', path);
+
+          // eslint-disable-next-line no-await-in-loop
+          await this.#onDeleteList();
+          continue;
+        }
+
+        const rev = (body as Change['body'])?._rev;
+
+        trace(change, 'Received change');
+
+        let listChange = body as DeepPartial<List>;
+        try {
+          // The actual change was to a descendant of the list
+          if (changePath) {
+            // To decide if this change was to the list or to an item,
+            // need to check if itemsPath matches the changePath:
+            // if it does, it is to an item.
+            // If it doesn't, it's probably to the list.
+
+            // Reconstruct change to list?
+            const changeObject = {};
+            let isListChange = false;
+            if (itemsPath) {
+              // Just put true here for now to check if path matches
+              pointer.set(changeObject, changePath, true);
+              // eslint-disable-next-line new-cap
+              const pathmatches = JSONPath<string[]>({
+                resultType: 'pointer',
+                path: itemsPath,
+                json: changeObject,
+                preventEval: true,
+              });
+              if (pathmatches?.length === 0) {
+                // If it does not match, this must be above the items
+                isListChange = true;
+                trace(
+                  'Have a write to the list under itemsPath rather than to any of the items'
+                );
+              }
+            }
+
+            // Now put the actual change body in place of the true
+            pointer.set(changeObject, changePath, body);
+            // Find items involved in the change
+            const itemsChanged = getListItems(changeObject, itemsPath);
+            // The change was to items of the list (or their descendants)
+            if (!isListChange && itemsChanged.length > 0) {
+              // eslint-disable-next-line no-await-in-loop
+              await Promise.all(
+                itemsChanged.map((item) => {
+                  const itemBody: unknown = pointer.get(changeObject, item);
+                  // Make change start at item instead of the list
+                  const itemPath = changePath.slice(item.length);
+                  const itemChange: Change = {
+                    ...context,
+                    type,
+                    path: itemPath,
+                    body: itemBody as Resource,
+                  };
+                  // Check that it is a resource change?
+                  if (
+                    !(
+                      typeof itemBody === 'object' &&
+                      itemBody &&
+                      '_rev' in itemBody
+                    )
+                  ) {
+                    warn(
+                      itemChange,
+                      'Ignoring unexpected (as in the body does not have a _rev) change'
+                    );
+                    return;
+                  }
+
+                  return this.#handleItemChange(item, itemChange);
+                })
+              );
+              continue;
+            }
+
+            // The change is between the list and items
+            // (multiple link levels)
+            listChange = changeObject;
+          }
+
+          trace(
+            'Change was to the list itself because changePath is empty, calling handleListChange'
+          );
+          // eslint-disable-next-line no-await-in-loop
+          await this.#handleListChange(listChange, type);
+        } catch (cError: unknown) {
+          error(cError, `Error processing change at ${path}, rev ${rev}`);
+        }
+      }
+
+      if (this.#resume) {
+        trace(
+          'Received change to root of list, updating handled rev in our _meta records'
+        );
+        this.#meta.rev = `${(rootChange?.body as Resource)?._rev}`;
+      }
+    }
+
+    error('Change feed ended unexpectedly');
+    return undefined as never;
   }
 }
 
