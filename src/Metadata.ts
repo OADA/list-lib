@@ -27,6 +27,7 @@ import type { Json } from '@oada/client';
 import type { Conn } from './Options';
 
 const trace = debug('oada-list-lib#metadata:trace');
+const info = debug('oada-list-lib#metadata:info');
 const error = debug('oada-list-lib#metadata:error');
 
 /**
@@ -220,20 +221,25 @@ export class Metadata {
 
     // Try to get our metadata about this list
     try {
-      const { data: rev } = await this.#conn.get({
-        path: join(this.#path, 'rev'),
+      const { data } = await this.#conn.get({
+        path: this.#path,
       });
-      this.#rev = rev as string;
+      if (typeof data == 'object' && data && !Buffer.isBuffer(data) && !Array.isArray(data)) {
+        this.#rev = data!.rev as string;
+      }
       this.#initialized = true;
       return true;
     } catch {
       // Create our metadata?
+      info(`${this.#path} does not exist, posting new resource`);
       const {
         headers: { 'content-location': location },
       } = await this.#conn.post({
         path: '/resources/',
         data: {},
+        contentType: 'application/json'
       });
+      console.log('HERE IS THE LINK', location?.slice(1))
       await this.#conn.put({
         path: this.#path,
         tree: this.#tree,

@@ -407,9 +407,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@oada/client@npm:^3.0.3":
-  version: 3.0.3
-  resolution: "@oada/client@npm:3.0.3"
+"@oada/client@portal:/home/sanoel/client::locator=%40oada%2Flist-lib%40workspace%3A.":
+  version: 0.0.0-use.local
+  resolution: "@oada/client@portal:/home/sanoel/client::locator=%40oada%2Flist-lib%40workspace%3A."
   dependencies:
     "@oada/types": ^1.7.0
     buffer: ^6.0.3
@@ -433,9 +433,8 @@ __metadata:
     type-is: ^1.6.18
     utf-8-validate: ^5.0.7
     ws: ^8.3.0
-  checksum: e9f233daace3d1f7f135df40d7db52eb55cf4aaece2cebb64c2c98b757b562584e848f91cc44909f4ade7b9bb8b69dfb3c1eb28fff548a8c87eefa228a8f5f23
   languageName: node
-  linkType: hard
+  linkType: soft
 
 "@oada/list-lib@workspace:.":
   version: 0.0.0-use.local

@@ -378,7 +378,7 @@ export class ListWatch<Item = unknown> {
     // Needed because TS is weird about asserts...
     const assertItem: TypeAssert<Item> = this.#assertItem;
 
-    info('Detected new item %s in %s, rev %s', id, path, rev);
+    info(`${this.#resume ? 'Detected new' : 'Handing existing'} item %s in %s, rev %s`, id, path, rev);
     const { _rev } = item;
     assertItem(item);
 
@@ -644,7 +644,7 @@ export class ListWatch<Item = unknown> {
       rev: this.#resume ? this.#meta.rev : undefined,
       type: 'tree',
     });
-
+   
     void this.#handleChangeFeed(changes);
     return changes;
   }
