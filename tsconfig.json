@@ -1,9 +1,11 @@
 {
-  "extends": "@tsconfig/node12",
+  "extends": "@tsconfig/node14",
   "ts-node": {
     "files": true
   },
   "compilerOptions": {
+    "module": "es2020",
+    "moduleResolution": "node",
     "declaration": true,
     "rootDir": "src",
     "outDir": "lib",

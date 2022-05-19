@@ -23,7 +23,7 @@ import pointer from 'json-pointer';
 
 import type { Change as ClientChange, ConnectionResponse } from '@oada/client';
 import type { Link } from '@oada/types/oada/link/v1';
-import type { Resource } from '@oada/types/oada/resource';
+import type Resource from '@oada/types/oada/resource';
 import type V2Changes from '@oada/types/oada/change/v2';
 
 import { ItemState, Options } from './Options';
@@ -657,14 +657,13 @@ export class ListWatch<Item = unknown> {
       const rootChange = changes[0];
 
       // TODO: Better way than just looping through them all?
-      for (const change of changes) {
+      for await (const change of changes) {
         const { type, path: changePath, body, ...context } = change;
 
         if (body === null && type === 'delete' && changePath === '') {
           // The list itself was deleted
           warn('Detected delete of list %s', path);
 
-          // eslint-disable-next-line no-await-in-loop
           await this.#onDeleteList();
           continue;
         }
@@ -710,7 +709,6 @@ export class ListWatch<Item = unknown> {
             const itemsChanged = getListItems(changeObject, itemsPath);
             // The change was to items of the list (or their descendants)
             if (!isListChange && itemsChanged.length > 0) {
-              // eslint-disable-next-line no-await-in-loop
               await Promise.all(
                 itemsChanged.map((item) => {
                   const itemBody: unknown = pointer.get(changeObject, item);
@@ -751,7 +749,6 @@ export class ListWatch<Item = unknown> {
           trace(
             'Change was to the list itself because changePath is empty, calling handleListChange'
           );
-          // eslint-disable-next-line no-await-in-loop
           await this.#handleListChange(listChange, type);
         } catch (cError: unknown) {
           error(cError, `Error processing change at ${path}, rev ${rev}`);
