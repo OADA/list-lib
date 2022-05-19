@@ -47,7 +47,6 @@ export type Item = Record<
  *
  * @internal
  */
-// eslint-disable-next-line @typescript-eslint/consistent-indexed-object-style
 export type Items = { [key: string]: undefined | Item | Items };
 
 /**
@@ -230,8 +229,9 @@ export class Metadata {
         !Buffer.isBuffer(data) &&
         !Array.isArray(data)
       ) {
-        this.#rev = data!.rev as string;
+        this.#rev = data.rev as string;
       }
+
       this.#initialized = true;
       return true;
     } catch {
@@ -244,7 +244,6 @@ export class Metadata {
         data: {},
         contentType: 'application/json',
       });
-      console.log('HERE IS THE LINK', location?.slice(1));
       await this.#conn.put({
         path: this.#path,
         tree: this.#tree,

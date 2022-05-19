@@ -378,7 +378,14 @@ export class ListWatch<Item = unknown> {
     // Needed because TS is weird about asserts...
     const assertItem: TypeAssert<Item> = this.#assertItem;
 
-    info(`${this.#resume ? 'Detected new' : 'Handing existing'} item %s in %s, rev %s`, id, path, rev);
+    info(
+      `${
+        this.#resume ? 'Detected new' : 'Handing existing'
+      } item %s in %s, rev %s`,
+      id,
+      path,
+      rev
+    );
     const { _rev } = item;
     assertItem(item);
 
@@ -456,7 +463,7 @@ export class ListWatch<Item = unknown> {
                   'handleListChange: change has an _id, getting it and handing to handleNewItem'
                 );
                 const { data: item } = (await conn.get({
-                  path: `/${ichang._id}`
+                  path: `/${ichang._id}`,
                 })) as GetResponse<Resource>;
                 await this.#handleNewItem(`${rev}`, id, item);
               } else {
@@ -776,4 +783,4 @@ function stateCBnoItem<Item>(
   return callback.length < 2;
 }
 
-export { Options, ItemState } from './Options';
+export { Options, ItemState } from './Options.js';
