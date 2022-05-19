@@ -456,9 +456,7 @@ export class ListWatch<Item = unknown> {
                   'handleListChange: change has an _id, getting it and handing to handleNewItem'
                 );
                 const { data: item } = (await conn.get({
-                  // Joining path and id fails when jobs get moved into success/failure. Instead get the _id
-                  //                path: join(path, id),
-                  path: `/${id}`,
+                  path: `/${ichang._id}`
                 })) as GetResponse<Resource>;
                 await this.#handleNewItem(`${rev}`, id, item);
               } else {
