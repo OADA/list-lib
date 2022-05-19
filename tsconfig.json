@@ -6,6 +6,7 @@
   "compilerOptions": {
     "module": "es2020",
     "moduleResolution": "node",
+    "composite": true,
     "declaration": true,
     "rootDir": "src",
     "outDir": "lib",
@@ -24,5 +25,5 @@
     "sourceMap": true,
     "forceConsistentCasingInFileNames": true
   },
-  "exclude": ["lib", "**/*.spec.ts", "**/*-stub.ts"]
+  "include": ["src"]
 }

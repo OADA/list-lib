@@ -24,7 +24,7 @@ import test from 'ava';
 
 import { createStub, emptyResponse } from './conn-stub.js';
 
-import { Change, ListWatch, Tree, pathFromTree } from './index.js';
+import { Change, ListWatch, Tree, pathFromTree } from '../';
 
 const name = 'oada-list-lib-test';
 

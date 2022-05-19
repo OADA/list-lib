@@ -25,7 +25,7 @@ import type { PUTRequest } from '@oada/client';
 
 import { createStub, emptyResponse } from './conn-stub.js';
 
-import { Change, ListWatch } from './index.js';
+import { Change, ListWatch } from '../';
 
 const name = 'oada-list-lib-test';
 
@@ -37,7 +37,7 @@ test('should resume from last rev', async (t) => {
   const rev = '766';
 
   // @ts-expect-error test
-  conn.get.resolves({ data: rev });
+  conn.get.resolves({ data: { rev } });
 
   const options = {
     path,

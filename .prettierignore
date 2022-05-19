@@ -1,6 +1,9 @@
 # Ignore compiled TS output
 lib
 
+.test
+coverage
+
 yarn.lock
 tags*
 .history

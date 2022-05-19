@@ -96,7 +96,6 @@ function assumeItemState<State extends ItemState>(state: State) {
 /**
  * Type for the lists we can watch
  */
-// eslint-disable-next-line @typescript-eslint/consistent-indexed-object-style
 export type List = Resource & { [key: string]: Link | List };
 
 function getListItems(list: DeepPartial<List>, path: string) {
@@ -115,7 +114,6 @@ function getListItems(list: DeepPartial<List>, path: string) {
 /**
  * Generates an equivalent JSON Path from an OADA Tree object
  *
- * @internal
  * @experimental trees with multiple "paths" (excluding *)
  */
 export function pathFromTree(tree: Tree, root = ''): string {

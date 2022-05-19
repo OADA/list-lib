@@ -116,12 +116,6 @@ export class Metadata {
     const updateRevs = async () => {
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       for await (const _ of revUpdateInterval) {
-        trace(
-          'rev update interval %d, %s, %s',
-          this.#rev,
-          this.#initialized,
-          this.#revDirty
-        );
         if (!this.#initialized || !this.#revDirty) {
           continue;
         }
