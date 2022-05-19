@@ -24,7 +24,7 @@ import pointer from 'json-pointer';
 
 import type { Json } from '@oada/client';
 
-import type { Conn } from './Options';
+import type { Conn } from './Options.js';
 
 const trace = debug('oada-list-lib#metadata:trace');
 const info = debug('oada-list-lib#metadata:info');
@@ -224,7 +224,12 @@ export class Metadata {
       const { data } = await this.#conn.get({
         path: this.#path,
       });
-      if (typeof data == 'object' && data && !Buffer.isBuffer(data) && !Array.isArray(data)) {
+      if (
+        typeof data == 'object' &&
+        data &&
+        !Buffer.isBuffer(data) &&
+        !Array.isArray(data)
+      ) {
         this.#rev = data!.rev as string;
       }
       this.#initialized = true;
@@ -237,9 +242,9 @@ export class Metadata {
       } = await this.#conn.post({
         path: '/resources/',
         data: {},
-        contentType: 'application/json'
+        contentType: 'application/json',
       });
-      console.log('HERE IS THE LINK', location?.slice(1))
+      console.log('HERE IS THE LINK', location?.slice(1));
       await this.#conn.put({
         path: this.#path,
         tree: this.#tree,

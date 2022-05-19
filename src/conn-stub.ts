@@ -16,7 +16,7 @@
  */
 
 import { Change, ConnectionResponse, OADAClient } from '@oada/client';
-import type { WatchResponse } from '@oada/client/dist/client';
+import type { WatchResponse } from '@oada/client/dist/client.js';
 import { createStubInstance } from 'sinon';
 
 export const emptyResponse: ConnectionResponse = {

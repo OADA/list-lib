@@ -23,9 +23,9 @@ import test from 'ava';
 // Import { Change } from '@oada/types/oada/change/v2';
 import type { PUTRequest } from '@oada/client';
 
-import { createStub, emptyResponse } from './conn-stub';
+import { createStub, emptyResponse } from './conn-stub.js';
 
-import { Change, ListWatch } from './';
+import { Change, ListWatch } from './index.js';
 
 const name = 'oada-list-lib-test';
 

@@ -22,15 +22,15 @@ import debug from 'debug';
 import pointer from 'json-pointer';
 
 import type { Change as ClientChange, ConnectionResponse } from '@oada/client';
-import type { Link } from '@oada/types/oada/link/v1';
-import type Resource from '@oada/types/oada/resource';
-import type V2Changes from '@oada/types/oada/change/v2';
+import type { Link } from '@oada/types/oada/link/v1.js';
+import type Resource from '@oada/types/oada/resource.js';
+import type V2Changes from '@oada/types/oada/change/v2.js';
 
-import { ItemState, Options } from './Options';
-import { Metadata } from './Metadata';
-import type { Tree } from './tree';
+import { ItemState, Options } from './Options.js';
+import { Metadata } from './Metadata.js';
+import type { Tree } from './tree.js';
 
-export type { Tree } from './tree';
+export type { Tree } from './tree.js';
 
 const info = debug('oada-list-lib:info');
 const warn = debug('oada-list-lib:warn');
@@ -642,7 +642,7 @@ export class ListWatch<Item = unknown> {
       rev: this.#resume ? this.#meta.rev : undefined,
       type: 'tree',
     });
-   
+
     void this.#handleChangeFeed(changes);
     return changes;
   }

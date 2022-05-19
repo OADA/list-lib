@@ -18,7 +18,7 @@
 // TODO: Fix this
 // Import type { Change } from '@oada/types/oada/change/v2';
 
-import type { Change, TypeAssert } from './';
+import type { Change, TypeAssert } from './index.js';
 
 import type { OADAClient } from '@oada/client';
 

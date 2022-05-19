@@ -22,9 +22,9 @@ import test from 'ava';
 // TODO: Fix this
 // Import { Change } from '@oada/types/oada/change/v2';
 
-import { createStub, emptyResponse } from './conn-stub';
+import { createStub, emptyResponse } from './conn-stub.js';
 
-import { Change, ListWatch, Tree, pathFromTree } from './';
+import { Change, ListWatch, Tree, pathFromTree } from './index.js';
 
 const name = 'oada-list-lib-test';
 
