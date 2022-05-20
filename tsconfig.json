@@ -9,7 +9,7 @@
     "composite": true,
     "declaration": true,
     "rootDir": "src",
-    "outDir": "lib",
+    "outDir": "dist",
     "stripInternal": true,
     "importHelpers": true,
     "alwaysStrict": true,

@@ -1,10 +1,9 @@
 {
   "name": "@oada/list-lib",
-  "version": "3.0.5",
+  "version": "3.0.6",
   "description": "Library for processing items in an OADA list",
-  "main": "lib/index.js",
+  "main": "dist/index.js",
   "type": "module",
-  "typings": "lib/index.d.ts",
   "repository": {
     "type": "git",
     "url": "https://github.com/OADA/list-lib.git"
