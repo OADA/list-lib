@@ -30,7 +30,7 @@ import { ItemState, Options } from './Options.js';
 import { Metadata } from './Metadata.js';
 import type { Tree } from './tree.js';
 
-export type { Tree } from './tree.js';
+export type { TreeKey, Tree } from './tree.js';
 
 const info = debug('oada-list-lib:info');
 const warn = debug('oada-list-lib:warn');
@@ -390,10 +390,10 @@ export class ListWatch<Item = unknown> {
     const handled = await this.#meta.handled(id);
     try {
       // Double check this is a new item?
-      if (!handled?.onAddItem) {
+//      if (!handled?.onAddItem) {
         await (this.#onAddItem && this.#onAddItem(item, id));
         await this.#meta.setHandled(id, { onAddItem: { rev: `${_rev}` } });
-      }
+ //     }
     } finally {
       // Call this even if previous callback errored
 
