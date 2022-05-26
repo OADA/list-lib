@@ -130,7 +130,7 @@ export class Metadata {
             data,
           });
         } catch (cError: unknown) {
-          error(cError, 'Failed to update rev');
+          error({ error: cError }, 'Failed to update rev');
           this.#revDirty = true;
         }
       }
@@ -230,7 +230,7 @@ export class Metadata {
       return true;
     } catch {
       // Create our metadata?
-      info(`${this.#path} does not exist, posting new resource`);
+      info('%s does not exist, posting new resource', this.#path);
       const {
         headers: { 'content-location': location },
       } = await this.#conn.post({

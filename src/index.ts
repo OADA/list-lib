@@ -268,7 +268,7 @@ export class ListWatch<Item = unknown> {
             try {
               return await this.#handleItemState(id);
             } catch (cError: unknown) {
-              error(cError, 'Error getting item state');
+              error({ error: cError }, 'Error getting item state');
               throw cError;
             }
           })
@@ -324,7 +324,7 @@ export class ListWatch<Item = unknown> {
 
           await this.#updateItemState(list, id, state);
         } catch (cError: unknown) {
-          error(cError);
+          error({ error: cError }, 'Error rechecking item state');
         }
       })
     );
@@ -376,35 +376,27 @@ export class ListWatch<Item = unknown> {
     // Needed because TS is weird about asserts...
     const assertItem: TypeAssert<Item> = this.#assertItem;
 
-    info(
-      `${
-        this.#resume ? 'Detected new' : 'Handing existing'
-      } item %s in %s, rev %s`,
-      id,
-      path,
-      rev
-    );
+    info('Detected new item %s in %s, rev %s', id, path, rev);
     const { _rev } = item;
     assertItem(item);
 
     const handled = await this.#meta.handled(id);
     try {
       // Double check this is a new item?
-//      if (!handled?.onAddItem) {
-        await (this.#onAddItem && this.#onAddItem(item, id));
+      if (!handled?.onAddItem) {
+        await this.#onAddItem?.(item, id);
         await this.#meta.setHandled(id, { onAddItem: { rev: `${_rev}` } });
- //     }
+      }
     } finally {
       // Call this even if previous callback errored
 
-      // TODO: Do I need to make a fake "change" to the item
-      // or will the feed have one??
+      // ???: Do I need to make a fake "change" or will the feed have one?
 
-      // Double check this item is actually newer than last time
-      if (Number(_rev) > Number(handled?.onItem?.rev ?? 0)) {
-        await (this.#onItem && this.#onItem(item, id));
-        await this.#meta.setHandled(id, { onItem: { rev: `${_rev}` } });
-      }
+      // ???: Double check this item is actually newer than last time
+      // if (Number(_rev) > Number(handled?.onItem?.rev ?? 0)) {
+      await this.#onItem?.(item, id);
+      await this.#meta.setHandled(id, { onItem: { rev: `${_rev}` } });
+      // }
     }
   }
 
@@ -417,7 +409,7 @@ export class ListWatch<Item = unknown> {
     info('Detected change to item %s in %s, rev %s', id, path, rev);
 
     try {
-      await (this.#onChangeItem && this.#onChangeItem(change, id));
+      await this.#onChangeItem?.(change, id);
       await this.#meta.setHandled(id, { onChangeItem: { rev: `${rev}` } });
     } finally {
       if (this.#onItem) {
@@ -442,30 +434,32 @@ export class ListWatch<Item = unknown> {
     const conn = this.#conn;
     const rev = list._rev;
     // Ignore _ keys of OADA
-    // const items = Object.keys(list).filter((k) => !k.match(/^_/));
     const items = getListItems(list, itemsPath);
-    trace(items, 'handleListChange');
+    trace({ items }, 'handleListChange');
 
+    const itemChanges = items.map<[string, Partial<Link>]>((id) => [
+      id,
+      pointer.get(list, id) as Partial<Link>,
+    ]);
     switch (type) {
       case 'merge':
         await Promise.all(
-          items.map(async (id) => {
+          itemChanges.map(async ([id, itemChange]) => {
             try {
               trace('handleListChange: Processing item %s', id);
-              const ichang = pointer.get(list, id) as Partial<Link>;
-              trace(ichang, 'handleListChange');
+              trace({ itemChange }, 'handleListChange');
 
               // If there is an _id this is a new link in the list right?
-              if (ichang._id) {
+              if (itemChange._id) {
                 trace(
                   'handleListChange: change has an _id, getting it and handing to handleNewItem'
                 );
                 const { data: item } = (await conn.get({
-                  path: `/${ichang._id}`,
+                  path: `/${itemChange._id}`,
                 })) as GetResponse<Resource>;
                 await this.#handleNewItem(`${rev}`, id, item);
               } else {
-                // TODO: What should we do now??
+                // ???: What should we do now??
                 trace(
                   'Ignoring non-link key added to list %s, rev %s',
                   path,
@@ -475,7 +469,7 @@ export class ListWatch<Item = unknown> {
             } catch (cError: unknown) {
               // Log error with this item but continue map over other items
               error(
-                cError,
+                { error: cError },
                 `Error processing change for ${id} at ${path}, rev ${rev}`
               );
             }
@@ -485,11 +479,9 @@ export class ListWatch<Item = unknown> {
 
       case 'delete':
         await Promise.all(
-          items.map(async (id) => {
+          itemChanges.map(async ([id, itemChange]) => {
             try {
-              const lChange = pointer.get(list, id) as Partial<Link>;
-
-              if (lChange === null) {
+              if (itemChange === null) {
                 info(
                   'Detected removal of item %s from %s, rev %s',
                   id,
@@ -497,13 +489,13 @@ export class ListWatch<Item = unknown> {
                   rev
                 );
                 try {
-                  await (this.#onRemoveItem && this.#onRemoveItem(id));
+                  await this.#onRemoveItem?.(id);
                 } finally {
                   // Mark for delete?
                   await this.#meta.setHandled(id);
                 }
               } else {
-                // TODO: What does this mean??
+                // ???: What does this mean??
                 trace(
                   'Ignoring non-link key added to list %s, rev %s',
                   path,
@@ -513,7 +505,7 @@ export class ListWatch<Item = unknown> {
             } catch (cError: unknown) {
               // Log error with this item but continue map over other items
               error(
-                cError,
+                { error: cError },
                 `Error processing change for ${id} at ${path}, rev ${rev}`
               );
             }
@@ -587,7 +579,7 @@ export class ListWatch<Item = unknown> {
           }
         } catch (cError: unknown) {
           error(
-            cError,
+            { error: cError },
             `Error processing item state "${state}" for item ${id}`
           );
         }
@@ -612,12 +604,12 @@ export class ListWatch<Item = unknown> {
         await conn.put({ path, tree, data: {} });
         trace('Created %s because it did not exist', path);
       } else {
-        error(cError);
+        error({ error: cError });
         throw cError;
       }
     }
 
-    // TODO: Clean up control flow to not need this?
+    // FIXME: Clean up control flow to not need this?
     const currentItemsNew = !(await this.#meta.init()) || !this.#resume;
     if (currentItemsNew) {
       trace('Treating current list items as new items');
@@ -675,7 +667,7 @@ export class ListWatch<Item = unknown> {
 
         const rev = (body as Change['body'])?._rev;
 
-        trace(change, 'Received change');
+        trace({ change }, 'Received change');
 
         let listChange = body as DeepPartial<List>;
         try {
@@ -734,7 +726,7 @@ export class ListWatch<Item = unknown> {
                     )
                   ) {
                     warn(
-                      itemChange,
+                      { itemChange },
                       'Ignoring unexpected (as in the body does not have a _rev) change'
                     );
                     return;
@@ -756,7 +748,10 @@ export class ListWatch<Item = unknown> {
           );
           await this.#handleListChange(listChange, type);
         } catch (cError: unknown) {
-          error(cError, `Error processing change at ${path}, rev ${rev}`);
+          error(
+            { error: cError },
+            `Error processing change at ${path}, rev ${rev}`
+          );
         }
       }
 
