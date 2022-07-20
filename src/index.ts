@@ -28,9 +28,9 @@ import type V2Changes from '@oada/types/oada/change/v2.js';
 
 import { ItemState, Options } from './Options.js';
 import { Metadata } from './Metadata.js';
-import type { Tree } from './tree.js';
+import type { Tree } from './Tree.js';
 
-export type { TreeKey, Tree } from './tree.js';
+export type { TreeKey, Tree } from './Tree.js';
 
 const info = debug('oada-list-lib:info');
 const warn = debug('oada-list-lib:warn');
