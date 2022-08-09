@@ -138,7 +138,6 @@ test('it should detect new item', async (t) => {
       resource_id: 'resources/default:resources_bookmarks_321',
       path: '',
       body: {
-        // eslint-disable-next-line no-secrets/no-secrets
         '1e6XB0Hy7XJICbi3nMzCtl4QLpC': {
           _id: id,
         },
@@ -196,7 +195,6 @@ test('it should detect removed item', async (t) => {
       resource_id: 'resources/default:resources_bookmarks_321',
       path: '',
       body: {
-        // eslint-disable-next-line no-secrets/no-secrets, unicorn/no-null
         '1e6XB0Hy7XJICbi3nMzCtl4QLpC': null,
         '_meta': {
           modifiedBy: 'users/default:users_sam_321',

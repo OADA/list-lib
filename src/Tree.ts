@@ -43,8 +43,8 @@ type Letter =
 
 export type TreeKey = `${Letter | '*' | Uppercase<Letter>}${string}`;
 
-export type Tree = {
+export interface Tree {
   [key: TreeKey]: Tree;
   _type?: string;
   _rev?: number;
-};
+}

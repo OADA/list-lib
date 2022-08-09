@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-// TODO: Fix this
+// FIXME: Fix this
 // Import type { Change } from '@oada/types/oada/change/v2';
 
 import type { Change, TypeAssert } from './index.js';

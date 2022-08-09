@@ -47,7 +47,9 @@ export type Item = Record<
  *
  * @internal
  */
-export type Items = { [key: string]: undefined | Item | Items };
+export interface Items {
+  [key: string]: undefined | Item | Items;
+}
 
 /**
  * Persistent data we store in the _meta of the list
@@ -114,7 +116,6 @@ export class Metadata {
     // TODO: Use timeouts for all updates?
     const revUpdateInterval = setInterval(100);
     const updateRevs = async () => {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       for await (const _ of revUpdateInterval) {
         if (!this.#initialized || !this.#revDirty) {
           continue;
@@ -130,7 +131,7 @@ export class Metadata {
             data,
           });
         } catch (cError: unknown) {
-          error(cError, 'Failed to update rev');
+          error({ error: cError }, 'Failed to update rev');
           this.#revDirty = true;
         }
       }
@@ -230,7 +231,7 @@ export class Metadata {
       return true;
     } catch {
       // Create our metadata?
-      info(`${this.#path} does not exist, posting new resource`);
+      info('%s does not exist, posting new resource', this.#path);
       await this.#conn.put({
         path: this.#path,
         tree: this.#tree,
