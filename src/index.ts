@@ -275,6 +275,7 @@ export class ListWatch<Item = unknown> {
         );
     }
 
+
     this.#meta = new Metadata({
       // Don't persist metdata if service does not "resume"
       // persistInterval: this.#resume ? persistInterval : 0,

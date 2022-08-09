@@ -231,26 +231,11 @@ export class Metadata {
     } catch {
       // Create our metadata?
       info(`${this.#path} does not exist, posting new resource`);
-      const {
-        headers: { 'content-location': location },
-      } = await this.#conn.post({
-        path: '/resources/',
-        data: {},
-        contentType: 'application/json',
-      });
       await this.#conn.put({
         path: this.#path,
         tree: this.#tree,
-        data: { _id: location?.slice(1) },
-      });
-      const data: Json = {
-        rev: this.#rev,
-      };
-      await this.#conn.put({
-        path: this.#path,
-        tree: this.#tree,
-        data,
-      });
+        data: {rev:this.#rev},
+      })
       this.#initialized = true;
       return false;
     }
