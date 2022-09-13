@@ -19,96 +19,16 @@ import { setTimeout } from 'isomorphic-timers-promises';
 import { spy } from 'sinon';
 import test from 'ava';
 
-// TODO: Fix this
-// Import { Change } from '@oada/types/oada/change/v2';
-
 import { createStub, emptyResponse } from './conn-stub.js';
 
-import { Change, ListWatch, Tree, pathFromTree } from '../';
+// eslint-disable-next-line node/no-extraneous-import
+import type { Change } from '@oada/list-lib';
+// eslint-disable-next-line node/no-extraneous-import
+import { ListWatch } from '@oada/list-lib';
 
 const name = 'oada-list-lib-test';
 
 const delay = 100;
-
-test('it should create JSON Path from simple OADA tree', (t) => {
-  const tree: Tree = {
-    bookmarks: {
-      _type: 'application/vnd.oada.bookmarks.1+json',
-      _rev: 0,
-      thing: {
-        // eslint-disable-next-line sonarjs/no-duplicate-string
-        _type: 'application/json',
-        _rev: 0,
-        abc: {
-          '*': {
-            _type: 'application/json',
-            _rev: 0,
-          },
-        },
-      },
-    },
-  };
-
-  const path = pathFromTree(tree);
-
-  t.is(path, '$.bookmarks.thing.abc.*');
-});
-
-test('it should create JSON Path from OADA tree and root', (t) => {
-  const tree: Tree = {
-    bookmarks: {
-      _type: 'application/vnd.oada.bookmarks.1+json',
-      _rev: 0,
-      thing: {
-        _type: 'application/json',
-        _rev: 0,
-        abc: {
-          '*': {
-            _type: 'application/json',
-            _rev: 0,
-          },
-        },
-      },
-    },
-  };
-
-  const path = pathFromTree(tree, '/bookmarks/thing');
-
-  t.is(path, '$.abc.*');
-});
-
-test('it should create JSON Path from two path OADA tree', (t) => {
-  const tree: Tree = {
-    bookmarks: {
-      _type: 'application/vnd.oada.bookmarks.1+json',
-      _rev: 0,
-      thing1: {
-        _type: 'application/json',
-        _rev: 0,
-        abc: {
-          '*': {
-            _type: 'application/json',
-            _rev: 0,
-          },
-        },
-      },
-      thing2: {
-        _type: 'application/json',
-        _rev: 0,
-        abc: {
-          '*': {
-            _type: 'application/json',
-            _rev: 0,
-          },
-        },
-      },
-    },
-  };
-
-  const path = pathFromTree(tree);
-
-  t.is(path, '$.bookmarks.[thing1,thing2].abc.*');
-});
 
 test('it should WATCH given path', async (t) => {
   const conn = createStub();
@@ -123,6 +43,7 @@ test('it should WATCH given path', async (t) => {
 
   t.is(conn.watch.firstCall?.args?.[0]?.path, path);
 });
+
 test.todo('it should reconnect WATCH');
 
 test('it should detect new item', async (t) => {
@@ -166,6 +87,7 @@ test('it should detect new item', async (t) => {
   };
 
   async function* changes() {
+    yield change;
     yield change;
   }
 
@@ -220,6 +142,7 @@ test('it should detect removed item', async (t) => {
 
   async function* changes() {
     yield change;
+    yield change;
   }
 
   // @ts-expect-error bs from deprecated v2 API
@@ -238,4 +161,5 @@ test('it should detect removed item', async (t) => {
   t.is(options.onChangeItem.callCount, 0);
   t.is(options.onRemoveItem.callCount, 1);
 });
+
 test.todo('it should detect modified item');

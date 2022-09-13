@@ -15,20 +15,25 @@
  * limitations under the License.
  */
 
+import { inspect } from 'node:util';
 import { join } from 'node:path';
 import { setInterval } from 'isomorphic-timers-promises';
 
-import clone from 'clone-deep';
 import debug from 'debug';
-import pointer from 'json-pointer';
 
 import type { Json } from '@oada/client';
 
+import { assertNever, AssumeState } from './index.js';
 import type { Conn } from './Options.js';
 
-const trace = debug('oada-list-lib#metadata:trace');
-const info = debug('oada-list-lib#metadata:info');
-const error = debug('oada-list-lib#metadata:error');
+const log = {
+  trace: debug('oada-list-lib#metadata:trace'),
+  debug: debug('oada-list-lib#metadata:debug'),
+  info: debug('oada-list-lib#metadata:info'),
+  warn: debug('oada-list-lib#metadata:warn'),
+  error: debug('oada-list-lib#metadata:error'),
+  fatal: debug('oada-list-lib#metadata:fatal'),
+};
 
 /**
  * Record of a successfully handled list item
@@ -51,6 +56,14 @@ export interface Items {
   [key: string]: undefined | Item | Items;
 }
 
+export interface Meta {
+  rev: string;
+  // eslint-disable-next-line @typescript-eslint/consistent-indexed-object-style
+  errors: {
+    [pointer: string]: Record<number, string>;
+  };
+}
+
 /**
  * Persistent data we store in the _meta of the list
  *
@@ -68,50 +81,28 @@ export class Metadata {
   /**
    * The rev we left off on
    */
-  #rev?: string;
+  #rev = 0;
   #revDirty = false;
 
   // Where to store state
-  #conn?;
+  #conn;
   #path;
-  #tree?: Record<string, unknown>;
   #initialized = false;
 
   constructor({
     conn,
     path,
-    tree,
     name,
   }: {
     /**
      * The path to the resource with which to associate this metadata
      */
     path: string;
-    /**
-     * Optional OADA tree corresponding to `path`
-     */
-    tree?: Record<string, unknown>;
     name: string;
-    conn?: Conn;
+    conn: Conn;
   }) {
     this.#conn = conn;
     this.#path = join(path, '_meta', Metadata.META_KEY, name);
-    this.#tree = clone(tree);
-    if (this.#tree) {
-      // Replicate list tree under handled key?
-      const listTree: unknown = clone(pointer.get(this.#tree, path));
-      pointer.set(this.#tree, this.#path, {
-        _type: 'application/json',
-        handled: listTree,
-      });
-    } else {
-      // Make up a tree? idk man
-      this.#tree = {};
-      pointer.set(this.#tree, this.#path, {
-        _type: 'application/json',
-        handled: { '*': {} },
-      });
-    }
 
     // TODO: Use timeouts for all updates?
     const revUpdateInterval = setInterval(100);
@@ -121,17 +112,16 @@ export class Metadata {
           continue;
         }
 
-        trace('Recording rev %s', this.#rev);
+        log.trace('Recording rev %s', this.#rev);
         const data: Json = { rev: this.#rev };
         this.#revDirty = false;
         try {
           await this.#conn?.put({
             path: this.#path,
-            tree: this.#tree,
             data,
           });
-        } catch (cError: unknown) {
-          error({ error: cError }, 'Failed to update rev');
+        } catch (error: unknown) {
+          log.error({ error }, 'Failed to update rev');
           this.#revDirty = true;
         }
       }
@@ -140,8 +130,8 @@ export class Metadata {
     void updateRevs();
   }
 
-  get rev(): string {
-    return `${this.#rev}`;
+  get rev(): number {
+    return this.#rev;
   }
 
   set rev(rev) {
@@ -150,54 +140,23 @@ export class Metadata {
       return;
     }
 
-    trace(`Updating local rev to ${rev}`);
+    log.trace('Updating local rev to %d', rev);
     this.#rev = rev;
     this.#revDirty = true;
   }
 
-  /**
-   * Set handled info of a list item
-   *
-   * @param path JSON pointer of list item
-   * @param item Item info to set
-   */
-  async setHandled(path: string, item?: Item) {
-    if (item) {
-      // Merge with current info
-
-      const data: Json = {};
-      pointer.set(data, `/handled${path}`, item);
-
-      await this.#conn?.put({
-        path: this.#path,
-        tree: this.#tree,
-        data,
-      });
-    } else {
-      // Unset info?
-      await this.#conn?.delete({ path: join(this.#path, 'handled', path) });
-    }
-    // This.#updated = true;
-  }
-
-  /**
-   * Get handled info of a list item
-   *
-   * @param path JSON pointer of list item
-   */
-  async handled(path: string): Promise<Item | undefined> {
-    if (!this.#conn) {
-      return undefined;
-    }
-
-    try {
-      const { data } = await this.#conn.get({
-        path: join(this.#path, 'handled', path),
-      });
-      return data as Item;
-    } catch {
-      return undefined;
-    }
+  async setErrored(pointer: string, rev: number, error: unknown) {
+    // Merge with current info
+    await this.#conn?.put({
+      path: this.#path,
+      data: {
+        errors: {
+          [pointer]: {
+            [rev]: inspect(error),
+          },
+        },
+      },
+    });
   }
 
   /**
@@ -206,13 +165,7 @@ export class Metadata {
    *
    * @TODO I hate needing to call init...
    */
-  public async init(): Promise<boolean> {
-    if (!this.#conn) {
-      this.#rev = undefined;
-      this.#initialized = true;
-      return false;
-    }
-
+  public async init(assume: AssumeState): Promise<boolean> {
     // Try to get our metadata about this list
     try {
       const { data } = await this.#conn.get({
@@ -224,19 +177,49 @@ export class Metadata {
         !Buffer.isBuffer(data) &&
         !Array.isArray(data)
       ) {
-        this.#rev = data.rev as string;
+        this.#rev = Number(data.rev ?? 0);
       }
 
       this.#initialized = true;
       return true;
     } catch {
       // Create our metadata?
-      info('%s does not exist, posting new resource', this.#path);
+      log.info('%s does not exist, posting new resource', this.#path);
+      const {
+        headers: { 'content-location': location },
+      } = await this.#conn.post({
+        path: '/resources/',
+        data: {},
+        contentType: 'application/json',
+      });
+      const {
+        headers: { 'x-oada-rev': revHeader },
+      } = await this.#conn.put({
+        path: this.#path,
+        data: { _id: location?.slice(1) },
+      });
+
+      let rev: number;
+      switch (assume) {
+        case AssumeState.Handled:
+          rev = Number(revHeader ?? 0);
+          break;
+
+        case AssumeState.New:
+          rev = 0;
+          break;
+
+        default:
+          assertNever(assume);
+      }
+
+      this.#rev = rev!;
       await this.#conn.put({
         path: this.#path,
-        tree: this.#tree,
-        data: {rev:this.#rev},
-      })
+        data: {
+          rev: rev!,
+        },
+      });
       this.#initialized = true;
       return false;
     }

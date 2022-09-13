@@ -15,27 +15,32 @@
  * limitations under the License.
  */
 
+import type { EventEmitter as NodeEventEmitter } from 'node:events';
 import { join } from 'node:path';
+import { on } from 'node:events';
 
+import EventEmitter from 'eventemitter3';
 import { JSONPath } from 'jsonpath-plus';
+import { JsonPointer } from 'json-ptr';
 import debug from 'debug';
-import pointer from 'json-pointer';
+import objectAssignDeep from 'object-assign-deep';
 
-import type { Change as ClientChange, ConnectionResponse } from '@oada/client';
+import type { ConnectionResponse, Json, JsonObject } from '@oada/client';
 import type { Link } from '@oada/types/oada/link/v1.js';
 import type Resource from '@oada/types/oada/resource.js';
 import type V2Changes from '@oada/types/oada/change/v2.js';
 
-import { ItemState, Options } from './Options.js';
 import { Metadata } from './Metadata.js';
-import type { Tree } from './Tree.js';
+import type { Options } from './Options.js';
 
-export type { TreeKey, Tree } from './Tree.js';
-
-const info = debug('oada-list-lib:info');
-const warn = debug('oada-list-lib:warn');
-const trace = debug('oada-list-lib:trace');
-const error = debug('oada-list-lib:error');
+const log = {
+  trace: debug('oada-list-lib:trace'),
+  debug: debug('oada-list-lib:debug'),
+  info: debug('oada-list-lib:info'),
+  warn: debug('oada-list-lib:warn'),
+  error: debug('oada-list-lib:error'),
+  fatal: debug('oada-list-lib:fatal'),
+};
 
 /**
  * Type for a single V2 OADA change (rather than the array)
@@ -55,42 +60,15 @@ export type GetResponse<T = unknown> = ConnectionResponse & {
   data: T;
 };
 
-/**
- * Recursive version of the Partial utility type
- *
- * Makes nested properties optional too.
- */
-type DeepPartial<T> = {
-  [P in keyof T]?: DeepPartial<T[P]>;
-};
-
 export type TypeAssert<T> = (value: unknown) => asserts value is T;
 
 /**
  * Tell TS we should never reach here (i.e., this should never be called)
+ *
+ * @internal
  */
-function assertNever(value: never, message?: string): never {
+export function assertNever(value: never, message?: string): never {
   throw new Error(message ?? `Bad value: ${value}`);
-}
-
-/**
- * Create a callback which assumes item(s) have the given state.
- * @param state The ItemsState to assume
- */
-function assumeItemState<State extends ItemState>(state: State) {
-  function assume(id: readonly string[]): State[];
-  function assume(id: string): State;
-  function assume(id: string | readonly string[]) {
-    warn('Assuming state %s for item(s) %s', state, id);
-    if (Array.isArray(id)) {
-      const ids = id;
-      return ids.map(() => state);
-    }
-
-    return state;
-  }
-
-  return assume;
 }
 
 /**
@@ -98,53 +76,85 @@ function assumeItemState<State extends ItemState>(state: State) {
  */
 export type List = Resource & { [key: string]: Link | List };
 
-function getListItems(list: DeepPartial<List>, path: string) {
-  // eslint-disable-next-line new-cap
-  return JSONPath<string[]>({
-    resultType: 'pointer',
-    path,
-    json: list,
-    preventEval: true,
-  }).filter(
-    // Don't follow underscore keys
-    (p) => !p.includes('/_')
-  );
+export interface ItemEvent<Item = never> {
+  listRev: number;
+  pointer: string;
+  item?: Item;
+}
+export interface ItemChange<Item = never> extends ItemEvent<Item> {
+  rev: number;
+  change: Change;
+}
+
+const changeSym = Symbol('change');
+type Foo<T> = T & {
+  [changeSym]?: Array<Readonly<Change>>;
+};
+interface Result<T, P = unknown> {
+  value: T;
+  path: string;
+  pointer: string;
+  parent: P;
+  parentProperty: string;
 }
 
 /**
- * Generates an equivalent JSON Path from an OADA Tree object
- *
- * @experimental trees with multiple "paths" (excluding *)
+ * Type of changes to detect in a list
  */
-export function pathFromTree(tree: Tree, root = ''): string {
-  let path = '$.*';
-  let outPath = '$';
+export const enum ChangeType {
+  /**
+   * Event for when an existing item is changed
+   */
+  ItemChanged = 'itemChange',
+  /**
+   * Event for when a new item is added
+   */
+  ItemAdded = 'addedItem',
+  /**
+   * Event for when an item is removed from the list
+   */
+  ItemRemoved = 'removedItem',
+  // ItemUnknown = 'unknownItem',
+  ItemAny = 'anyItem',
+}
 
-  const json = pointer.get(tree, root) as Tree;
-  // eslint-disable-next-line no-constant-condition
-  while (true) {
-    // Get set of non underscore keys
-    const keys = Array.from(
-      new Set(
-        // eslint-disable-next-line new-cap
-        JSONPath<string[]>({
-          resultType: 'parentProperty',
-          path,
-          json,
-        }).filter((k) => !k.startsWith('_'))
-      )
-    );
-    if (keys.length === 0) {
-      break;
-    }
+export interface EventTypes<Item> {
+  [ChangeType.ItemChanged]: [ItemChange<Item>];
+  [ChangeType.ItemAdded]: [ItemEvent<Item>];
+  [ChangeType.ItemRemoved]: [ItemEvent<Item>];
+  [ChangeType.ItemAny]: [ItemEvent<Item>];
+  error: unknown[];
+}
 
-    // eslint-disable-next-line sonarjs/no-nested-template-literals
-    outPath += `.${keys.length === 1 ? keys[0] : `[${keys.join(',')}]`}`;
+export type ItemType<E extends ChangeType, Item> = EventTypes<Item>[E][0];
 
-    path += '.*';
+/**
+ * Replace `null` values in delete changes with `undefined`
+ */
+function translateDelete(body: Json): Json | undefined {
+  if (body === null) {
+    return undefined;
   }
 
-  return outPath;
+  if (typeof body !== 'object') {
+    return body;
+  }
+
+  if (Array.isArray(body)) {
+    return body.map((item) => translateDelete(item) as Json);
+  }
+
+  return Object.fromEntries(
+    Object.entries(body).map(([key, value]) => [
+      key,
+      translateDelete(value!) as Json,
+    ])
+  );
+}
+
+export const enum AssumeState {
+  New,
+  Handled,
 }
 
 /**
@@ -157,23 +167,17 @@ export function pathFromTree(tree: Tree, root = ''): string {
  */
 export class ListWatch<Item = unknown> {
   /**
-   * Callback to make ListWatch consider every `Item` new
+   * Make ListWatch consider every unknown `Item` new
    *
-   * @see getItemState
-   * @see onNewList
-   * @see ItemState.New
+   * @deprecated
    */
-  // eslint-disable-next-line @typescript-eslint/naming-convention
-  public static readonly AssumeNew = assumeItemState(ItemState.New);
+  public static readonly AssumeNew = AssumeState.New;
   /**
-   * Callback to make ListWatch consider every `Item` handled
+   * Make ListWatch consider every unknown `Item` handled
    *
-   * @see getItemState
-   * @see onNewList
-   * @see ItemState.Handled
+   * @deprecated
    */
-  // eslint-disable-next-line @typescript-eslint/naming-convention
-  public static readonly AssumeHandled = assumeItemState(ItemState.Handled);
+  public static readonly AssumeHandled = AssumeState.Handled;
 
   /**
    * The OADA path of the List being watched
@@ -184,16 +188,10 @@ export class ListWatch<Item = unknown> {
    */
   public readonly itemsPath;
   /**
-   * The OADA Tree for the List being watched
-   * @see path
-   */
-  public readonly tree?;
-  /**
    * The unique name of this service/watch
    */
   public readonly name;
 
-  #resume;
   #conn;
   #watch;
   #assertItem;
@@ -201,20 +199,12 @@ export class ListWatch<Item = unknown> {
   // _meta stuff
   #meta;
 
-  // Callbacks
-  #onAddItem?;
-  #onChangeItem?;
-  #onItem?;
-  #onRemoveItem?;
-  #onNewList: NonNullable<Options<Item>['onNewList']>;
-  #onDeleteList;
-  #getItemState;
+  #emitter;
 
   constructor({
     path,
-    itemsPath,
-    tree,
-    name,
+    itemsPath = '$.*',
+    name = process.env.npm_package_name!,
     resume = false,
     conn,
     // If no assert given, assume all items valid
@@ -225,110 +215,191 @@ export class ListWatch<Item = unknown> {
     onItem,
     onRemoveItem,
     onNewList,
-    onDeleteList = async () => {
-      // TODO: Actually handle the list being deleted (redo watch?)
-      error('Unhandled delete of list %s', path);
-      // eslint-disable-next-line no-process-exit, unicorn/no-process-exit
-      process.exit();
-    },
-    // If no callback given, assume everything unknown is new
-    getItemState = ListWatch.AssumeNew,
   }: Options<Item>) {
     this.path = path;
-    this.tree = tree;
+    this.itemsPath = itemsPath;
     this.name = name;
-    this.#resume = resume;
     this.#conn = conn;
     this.#assertItem = assertItem;
+    this.#emitter = new EventEmitter<EventTypes<Item>, this>();
 
-    this.#onAddItem = onAddItem;
-    this.#onChangeItem = onChangeItem;
-    this.#onItem = onItem;
-    this.#onRemoveItem = onRemoveItem;
-    this.#onDeleteList = onDeleteList;
-    this.#getItemState = getItemState;
-
-    if (itemsPath) {
-      this.itemsPath = itemsPath;
-    } else if (tree) {
-      // Assume items are at the leaves of tree
-      this.itemsPath = pathFromTree(tree as Tree, path);
-    } else {
-      // Assume a flat list
-      this.itemsPath = '$.*';
+    if (onAddItem) {
+      this.#emitter.on(
+        ChangeType.ItemAdded,
+        this.#wrapListener(ChangeType.ItemAdded, async ({ item, pointer }) =>
+          onAddItem(item!, pointer)
+        )
+      );
     }
 
-    if (onNewList) {
-      this.#onNewList = onNewList;
-    } else {
-      // If no callback provided, ask client for states of pre-existing items
-      this.#onNewList = async (ids: readonly string[]) =>
-        Promise.all(
-          ids.map(async (id) => {
-            try {
-              return await this.#handleItemState(id);
-            } catch (cError: unknown) {
-              error({ error: cError }, 'Error getting item state');
-              throw cError;
-            }
-          })
-        );
+    if (onChangeItem) {
+      this.#emitter.on(
+        ChangeType.ItemChanged,
+        this.#wrapListener(
+          ChangeType.ItemChanged,
+          async ({ change, pointer }) => onChangeItem(change, pointer)
+        )
+      );
     }
 
+    if (onItem) {
+      this.#emitter.on(
+        ChangeType.ItemAny,
+        this.#wrapListener(ChangeType.ItemAny, async ({ item, pointer }) =>
+          onItem(item!, pointer)
+        )
+      );
+    }
 
-    this.#meta = new Metadata({
-      // Don't persist metdata if service does not "resume"
-      // persistInterval: this.#resume ? persistInterval : 0,
-      conn: this.#resume ? this.#conn : undefined,
-      path,
-      tree,
-      name,
-    });
-    this.#watch = this.#initialize();
+    if (onRemoveItem) {
+      this.#emitter.on(
+        ChangeType.ItemRemoved,
+        this.#wrapListener(ChangeType.ItemRemoved, async ({ pointer }) =>
+          onRemoveItem(pointer)
+        )
+      );
+    }
+
+    // Don't persist metdata if service does not "resume"
+    this.#meta = resume
+      ? new Metadata({
+          conn: this.#conn,
+          path,
+          name,
+        })
+      : undefined;
+    this.#watch = this.#initialize(onNewList);
   }
 
   /**
-   * Force library to recheck all current list items
-   * @see getItemState
-   * @param all check even items we think were handled
-   *
-   * @todo Better name?
+   * Emit our internal events
    */
-  public async forceRecheck(
-    /**
-     * @default false
-     */
-    all = false
-  ) {
-    const { path, itemsPath } = this;
-    const conn = this.#conn;
+  async #emit<E extends ChangeType>(event: E, itemEvent: ItemType<E, Item>) {
+    switch (event) {
+      case ChangeType.ItemChanged: {
+        log.debug({ itemChange: itemEvent }, 'Detected change to item');
+        this.#emitter.emit(
+          ChangeType.ItemChanged,
+          itemEvent as ItemType<ChangeType.ItemChanged, Item>
+        );
 
-    const { data: list } = (await conn.get({ path })) as GetResponse<List>;
-    if (Buffer.isBuffer(list)) {
-      throw new TypeError('List is not a JSON object');
+        if (this.#emitter.listenerCount(ChangeType.ItemAny) > 0) {
+          // Needed because TS is weird about asserts...
+          const assertItem: TypeAssert<Item> = this.#assertItem;
+          const { data: item } = await this.#conn.get({
+            path: join(this.path, itemEvent.pointer),
+          });
+          assertItem(item);
+          this.#emitter.emit(ChangeType.ItemAny, itemEvent);
+        }
+
+        break;
+      }
+
+      case ChangeType.ItemAdded: {
+        const assertItem: TypeAssert<Item> = this.#assertItem;
+        log.debug({ itemChange: itemEvent }, 'Detected new item');
+        const { item } = itemEvent;
+        assertItem(item);
+        this.#emitter.emit(ChangeType.ItemAdded, itemEvent);
+
+        this.#emitter.emit(ChangeType.ItemAny, itemEvent);
+
+        break;
+      }
+
+      case ChangeType.ItemRemoved:
+        log.debug({ itemChange: itemEvent }, 'Detected removed item');
+        this.#emitter.emit(ChangeType.ItemRemoved, itemEvent);
+        break;
+
+      case ChangeType.ItemAny:
+        throw new TypeError('ItemAny is not a valid event');
+
+      default:
+        assertNever(event, `Unknown event type ${event}`);
+    }
+  }
+
+  public on<E extends ChangeType>(
+    event: E,
+    listener?: (itemChange: ItemType<E, Item>) => void | PromiseLike<void>
+  ) {
+    if (listener) {
+      this.#emitter.on(event, this.#wrapListener(event, listener));
+      return undefined as void;
     }
 
-    // Const items = Object.keys(list).filter((k) => !k.match(/^_/));
-    const items = getListItems(list as DeepPartial<List>, itemsPath);
+    return this.#generate(event);
+  }
 
-    // Const { rev } = this.#meta;
-    await Promise.all(
-      items.map(async (id) => {
-        try {
-          if (!all && (await this.#meta.handled(id))) {
-            // We think this item is handled
-            return;
-          }
+  public once<E extends ChangeType>(
+    event: E,
+    listener?: (itemChange: ItemEvent<Item>) => void | PromiseLike<void>
+  ) {
+    if (listener) {
+      this.#emitter.once(event, this.#wrapListener(event, listener));
+      return;
+    }
 
-          // Ask lib user for state of this item
-          const state = await this.#handleItemState(id);
+    return this.#once(event);
+  }
 
-          await this.#updateItemState(list, id, state);
-        } catch (cError: unknown) {
-          error({ error: cError }, 'Error rechecking item state');
+  async #once<E extends ChangeType>(event: E) {
+    const generator = this.#generate(event);
+    try {
+      const { value } = await generator.next();
+      return [value] as EventTypes<Item>[E];
+    } finally {
+      await generator.return();
+    }
+  }
+
+  #wrapListener<E extends ItemEvent<Item>>(
+    type: string,
+    listener: (itemChange: E) => void | PromiseLike<void>
+  ) {
+    return async (itemChange: E) => {
+      try {
+        await listener(itemChange);
+      } catch (error: unknown) {
+        log.error(
+          { type, listener: listener.name, error },
+          'Error in listener'
+        );
+        await this.#meta?.setErrored(
+          itemChange.pointer,
+          itemChange.listRev,
+          error
+        );
+      } finally {
+        if (this.#meta) {
+          // Update our place in the change feed?
+          this.#meta.rev = itemChange.listRev;
         }
-      })
+      }
+    };
+  }
+
+  async *#generate<E extends ChangeType>(type: E) {
+    const events: AsyncIterable<EventTypes<Item>[E][0]> = on(
+      this.#emitter as unknown as NodeEventEmitter,
+      type
     );
+    for await (const event of events) {
+      try {
+        // Generate event
+        yield event;
+      } catch (error: unknown) {
+        log.error({ type, error }, 'Error in generator');
+        await this.#meta?.setErrored(event.pointer, event.listRev, error);
+      } finally {
+        if (this.#meta) {
+          // Update our place in the change feed?
+          this.#meta.rev = event.listRev;
+        }
+      }
+    }
   }
 
   /**
@@ -353,428 +424,157 @@ export class ListWatch<Item = unknown> {
   }
 
   /**
-   * Ask lib user for state of this item
-   *
-   * This handles fetching the Item before invoking the callback if needed
-   */
-  async #handleItemState(id: string): Promise<ItemState> {
-    // Needed because TS is weird about asserts...
-    const assertItem: TypeAssert<Item> = this.#assertItem;
-
-    if (!stateCBnoItem(this.#getItemState)) {
-      const { data: item } = await this.#conn.get({
-        path: join(this.path, id),
-      });
-      assertItem(item);
-      return this.#getItemState(id, item);
-    }
-
-    return this.#getItemState(id);
-  }
-
-  async #handleNewItem(rev: string, id: string, item: Resource) {
-    const { path } = this;
-    // Needed because TS is weird about asserts...
-    const assertItem: TypeAssert<Item> = this.#assertItem;
-
-    info('Detected new item %s in %s, rev %s', id, path, rev);
-    const { _rev } = item;
-    assertItem(item);
-
-    const handled = await this.#meta.handled(id);
-    try {
-      // Double check this is a new item?
-      if (!handled?.onAddItem) {
-        await this.#onAddItem?.(item, id);
-        await this.#meta.setHandled(id, { onAddItem: { rev: `${_rev}` } });
-      }
-    } finally {
-      // Call this even if previous callback errored
-
-      // ???: Do I need to make a fake "change" or will the feed have one?
-
-      // ???: Double check this item is actually newer than last time
-      // if (Number(_rev) > Number(handled?.onItem?.rev ?? 0)) {
-      await this.#onItem?.(item, id);
-      await this.#meta.setHandled(id, { onItem: { rev: `${_rev}` } });
-      // }
-    }
-  }
-
-  async #handleItemChange(id: string, change: Change) {
-    const { path } = this;
-    const conn = this.#conn;
-    const rev = change.body?._rev;
-
-    // TODO: How best to handle change to a descendant of an item?
-    info('Detected change to item %s in %s, rev %s', id, path, rev);
-
-    try {
-      await this.#onChangeItem?.(change, id);
-      await this.#meta.setHandled(id, { onChangeItem: { rev: `${rev}` } });
-    } finally {
-      if (this.#onItem) {
-        // Needed because TS is weird about asserts...
-        const assertItem: TypeAssert<Item> = this.#assertItem;
-
-        const { data: item } = await conn.get({
-          path: join(path, id),
-        });
-        assertItem(item);
-        await this.#onItem(item, id);
-        await this.#meta.setHandled(id, { onItem: { rev: `${rev}` } });
-      }
-    }
-  }
-
-  async #handleListChange(
-    list: DeepPartial<List>,
-    type: Change['type']
-  ): Promise<boolean> {
-    const { path, itemsPath } = this;
-    const conn = this.#conn;
-    const rev = list._rev;
-    // Ignore _ keys of OADA
-    const items = getListItems(list, itemsPath);
-    trace({ items }, 'handleListChange');
-
-    const itemChanges = items.map<[string, Partial<Link>]>((id) => [
-      id,
-      pointer.get(list, id) as Partial<Link>,
-    ]);
-    switch (type) {
-      case 'merge':
-        await Promise.all(
-          itemChanges.map(async ([id, itemChange]) => {
-            try {
-              trace('handleListChange: Processing item %s', id);
-              trace({ itemChange }, 'handleListChange');
-
-              // If there is an _id this is a new link in the list right?
-              if (itemChange._id) {
-                trace(
-                  'handleListChange: change has an _id, getting it and handing to handleNewItem'
-                );
-                const { data: item } = (await conn.get({
-                  path: `/${itemChange._id}`,
-                })) as GetResponse<Resource>;
-                await this.#handleNewItem(`${rev}`, id, item);
-              } else {
-                // ???: What should we do now??
-                trace(
-                  'Ignoring non-link key added to list %s, rev %s',
-                  path,
-                  rev
-                );
-              }
-            } catch (cError: unknown) {
-              // Log error with this item but continue map over other items
-              error(
-                { error: cError },
-                `Error processing change for ${id} at ${path}, rev ${rev}`
-              );
-            }
-          })
-        );
-        break;
-
-      case 'delete':
-        await Promise.all(
-          itemChanges.map(async ([id, itemChange]) => {
-            try {
-              if (itemChange === null) {
-                info(
-                  'Detected removal of item %s from %s, rev %s',
-                  id,
-                  path,
-                  rev
-                );
-                try {
-                  await this.#onRemoveItem?.(id);
-                } finally {
-                  // Mark for delete?
-                  await this.#meta.setHandled(id);
-                }
-              } else {
-                // ???: What does this mean??
-                trace(
-                  'Ignoring non-link key added to list %s, rev %s',
-                  path,
-                  rev
-                );
-              }
-            } catch (cError: unknown) {
-              // Log error with this item but continue map over other items
-              error(
-                { error: cError },
-                `Error processing change for ${id} at ${path}, rev ${rev}`
-              );
-            }
-          })
-        );
-        break;
-
-      default:
-        throw new TypeError(`Unknown change type ${type}`);
-    }
-
-    return items.length > 0;
-  }
-
-  /**
-   * Update the states of list items
-   *
-   * @see ItemState
-   */
-  async #updateItemState(
-    list: List,
-    ids: string | readonly string[],
-    states: ItemState | readonly ItemState[]
-  ) {
-    const { path } = this;
-    const { rev } = this.#meta;
-
-    const idArray = Array.isArray(ids) ? ids : [ids];
-    const stateArray = (
-      Array.isArray(states) ? states : [states]
-    ) as readonly ItemState[];
-    await Promise.all(
-      idArray.map(async (id, index) => {
-        const state = stateArray[Number(index)]!;
-        try {
-          switch (state) {
-            case ItemState.New:
-              {
-                const { data: item } = (await this.#conn.get({
-                  path: join(path, id),
-                })) as GetResponse<Resource>;
-                await this.#handleNewItem(`${list._rev}`, id, item);
-              }
-
-              break;
-            case ItemState.Modified:
-              {
-                const { data: item } = await this.#conn.get({
-                  path: join(path, id),
-                });
-                const change: Change = {
-                  resource_id: pointer.get(list, id)._id as string,
-                  path: '',
-                  type: 'merge',
-                  body: item as Resource,
-                };
-                await this.#handleItemChange(id, change);
-              }
-
-              break;
-            case ItemState.Handled:
-              info('Recording item %s as handled for %s', id, path);
-              // Mark handled for all callbacks?
-              await this.#meta.setHandled(id, {
-                onAddItem: { rev },
-                onItem: { rev },
-              });
-              break;
-            default:
-              assertNever(state);
-          }
-        } catch (cError: unknown) {
-          error(
-            { error: cError },
-            `Error processing item state "${state}" for item ${id}`
-          );
-        }
-      })
-    );
-  }
-
-  /**
    * Do async stuff for initializing ourself since constructors are synchronous
    */
-  async #initialize() {
-    const { path, tree, itemsPath } = this;
+  async #initialize(assume: AssumeState = AssumeState.New) {
+    const { path } = this;
     const conn = this.#conn;
 
-    info('Ensuring %s exists', path);
+    log.info('Ensuring %s exists', path);
     try {
       await conn.head({ path });
-    } catch (cError: unknown) {
+    } catch (error: unknown) {
       // @ts-expect-error darn errors
-      if (cError?.status === 403 || cError?.status === 404) {
+      if (error?.status === 403 || error?.status === 404) {
         // Create it
-        await conn.put({ path, tree, data: {} });
-        trace('Created %s because it did not exist', path);
+        await conn.put({ path, data: {} });
+        log.trace('Created %s because it did not exist', path);
       } else {
-        error({ error: cError });
-        throw cError;
+        log.error({ error });
+        throw error;
       }
-    }
-
-    // FIXME: Clean up control flow to not need this?
-    const currentItemsNew = !(await this.#meta.init()) || !this.#resume;
-    if (currentItemsNew) {
-      trace('Treating current list items as new items');
-      const { data: list } = (await conn.get({
-        path,
-        tree,
-      })) as GetResponse<List>;
-      // Const items = Object.keys(list).filter((k) => !k.match(/^_/));
-      const items = getListItems(list as DeepPartial<List>, itemsPath);
-
-      // Ask for states of pre-existing items
-      trace('Calling onNewList');
-      const states = await this.#onNewList(items);
-      // Set the states
-      trace('Updating item states based on callback result');
-      await this.#updateItemState(list, items, states);
     }
 
     // Setup watch on the path
-    if (this.#resume) {
-      trace('Resuming watch from rev %s', this.#meta.rev);
+    if (this.#meta) {
+      await this.#meta.init(assume);
+      log.debug('Resuming watch from rev %s', this.#meta.rev);
     }
 
     // eslint-disable-next-line security/detect-non-literal-fs-filename
     const { changes } = await conn.watch({
       path,
-      rev: this.#resume ? this.#meta.rev : undefined,
+      rev: this.#meta?.rev,
       type: 'tree',
     });
 
-    void this.#handleChangeFeed(changes);
+    // eslint-disable-next-line github/no-then
+    void this.#handleChangeFeed(changes).catch((error: unknown) =>
+      // Forward rejections to EventEmitter
+      this.#emitter.emit('error', error)
+    );
     return changes;
   }
 
   async #handleChangeFeed(
-    watch: AsyncIterable<ReadonlyArray<Readonly<ClientChange>>>
+    watch: AsyncIterable<ReadonlyArray<Readonly<Change>>>
   ): Promise<never> {
-    const { path, itemsPath } = this;
+    // Iterate through list change feed
+    for await (const [rootChange, ...children] of watch) {
+      const listRev = Number(
+        // @ts-expect-error just do it
+        rootChange!.body?._meta?._rev ?? rootChange!.body?._rev
+      );
+      if (
+        rootChange!.body === null &&
+        rootChange!.type === 'delete' &&
+        rootChange!.path === ''
+      ) {
+        // The list itself was deleted
+        log.warn(
+          'Detected delete of list %s, nothing left to watch',
+          rootChange!.path
+        );
+        break;
+      }
 
-    for await (const changes of watch) {
-      // Get root change?
-      const rootChange = changes[0];
+      // Construct object representing the change tree?
+      const changeBody: Foo<unknown> = {
+        [changeSym]: [rootChange!],
+        ...(rootChange!.type === 'delete'
+          ? (translateDelete(rootChange!.body as Json) as JsonObject)
+          : rootChange!.body),
+      };
+      for (const change of children) {
+        const ptr = JsonPointer.create(change.path);
+        const old = ptr.get(changeBody) as Foo<unknown>;
+        // eslint-disable-next-line security/detect-object-injection
+        const changes = old?.[changeSym] ?? [];
+        const body =
+          change.type === 'delete'
+            ? translateDelete(change.body as Json)
+            : change.body;
+        const merged = objectAssignDeep(old ?? {}, body, {
+          [changeSym]: [...changes, change],
+        });
+        ptr.set(changeBody, merged, true);
+      }
 
-      // TODO: Better way than just looping through them all?
-      for await (const change of changes) {
-        const { type, path: changePath, body, ...context } = change;
-
-        if (body === null && type === 'delete' && changePath === '') {
-          // The list itself was deleted
-          warn('Detected delete of list %s', path);
-
-          await this.#onDeleteList();
+      // Iterate though chid changes to list items
+      // eslint-disable-next-line new-cap
+      const items = JSONPath<Array<Result<Foo<Item>>>>({
+        resultType: 'all',
+        path: this.itemsPath,
+        json: changeBody,
+      });
+      for await (const { value, pointer } of items) {
+        if (value === undefined) {
+          // Item was removed from list
+          const itemChange: ItemEvent<Item> = {
+            listRev,
+            pointer,
+          };
+          await this.#emit(ChangeType.ItemRemoved, itemChange);
           continue;
         }
 
-        const rev = (body as Change['body'])?._rev;
+        const { [changeSym]: changes } = value;
+        if (!changes && '_id' in value) {
+          // Item was added to list?
+          const itemChange: ItemEvent<Item> = {
+            listRev,
+            pointer,
+          };
+          await this.#emit(ChangeType.ItemAdded, itemChange);
+          continue;
+        }
 
-        trace({ change }, 'Received change');
-
-        let listChange = body as DeepPartial<List>;
-        try {
-          // The actual change was to a descendant of the list
-          if (changePath) {
-            // To decide if this change was to the list or to an item,
-            // need to check if itemsPath matches the changePath:
-            // if it does, it is to an item.
-            // If it doesn't, it's probably to the list.
-
-            // Reconstruct change to list?
-            const changeObject = {};
-            let isListChange = false;
-            if (itemsPath) {
-              // Just put true here for now to check if path matches
-              pointer.set(changeObject, changePath, true);
-              // eslint-disable-next-line new-cap
-              const pathmatches = JSONPath<string[]>({
-                resultType: 'pointer',
-                path: itemsPath,
-                json: changeObject,
-                preventEval: true,
-              });
-              if (pathmatches?.length === 0) {
-                // If it does not match, this must be above the items
-                isListChange = true;
-                trace(
-                  'Have a write to the list under itemsPath rather than to any of the items'
-                );
-              }
-            }
-
-            // Now put the actual change body in place of the true
-            pointer.set(changeObject, changePath, body);
-            // Find items involved in the change
-            const itemsChanged = getListItems(changeObject, itemsPath);
-            // The change was to items of the list (or their descendants)
-            if (!isListChange && itemsChanged.length > 0) {
-              await Promise.all(
-                itemsChanged.map((item) => {
-                  const itemBody: unknown = pointer.get(changeObject, item);
-                  // Make change start at item instead of the list
-                  const itemPath = changePath.slice(item.length);
-                  const itemChange: Change = {
-                    ...context,
-                    type,
-                    path: itemPath,
-                    body: itemBody as Resource,
-                  };
-                  // Check that it is a resource change?
-                  if (
-                    !(
-                      typeof itemBody === 'object' &&
-                      itemBody &&
-                      '_rev' in itemBody
-                    )
-                  ) {
-                    warn(
-                      { itemChange },
-                      'Ignoring unexpected (as in the body does not have a _rev) change'
-                    );
-                    return;
-                  }
-
-                  return this.#handleItemChange(item, itemChange);
-                })
-              );
-              continue;
-            }
-
-            // The change is between the list and items
-            // (multiple link levels)
-            listChange = changeObject;
-          }
-
-          trace(
-            'Change was to the list itself because changePath is empty, calling handleListChange'
+        for await (const change of changes ?? []) {
+          log.trace({ change }, 'Received change');
+          const rev = Number(
+            // @ts-expect-error just do it
+            change.body?._meta?._rev ?? change.body?._rev
           );
-          await this.#handleListChange(listChange, type);
-        } catch (cError: unknown) {
-          error(
-            { error: cError },
-            `Error processing change at ${path}, rev ${rev}`
-          );
+
+          // ???: Find any children of change
+          // const changes = [change];
+          const itemChange: ItemChange = {
+            rev,
+            listRev,
+            pointer,
+            change: {
+              ...change,
+              // Adust change path to start at this item
+              path: change.path.slice(pointer.length),
+            },
+          };
+
+          // Emit generic item change event
+          await this.#emit(ChangeType.ItemChanged, itemChange);
         }
       }
 
-      if (this.#resume) {
-        trace(
+      if (this.#meta) {
+        log.trace(
           'Received change to root of list, updating handled rev in our _meta records'
         );
-        this.#meta.rev = `${(rootChange?.body as Resource)?._rev}`;
+        this.#meta.rev = (rootChange!.body as Resource)?._rev;
       }
     }
 
-    error('Change feed ended unexpectedly');
-    return undefined as never;
+    log.fatal('Change feed ended unexpectedly');
+    throw new Error('Change feed ended');
   }
 }
 
-// Gross stuff to make TS handle optional second param for callback
-type ItemStateNoItemCB = (id: string) => Promise<ItemState>;
-function stateCBnoItem<Item>(
-  callback: ItemStateNoItemCB | NonNullable<Options<Item>['getItemState']>
-): callback is ItemStateNoItemCB {
-  return callback.length < 2;
-}
-
-export { Options, ItemState } from './Options.js';
+export type { Options } from './Options.js';

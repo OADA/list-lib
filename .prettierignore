@@ -1,5 +1,5 @@
 # Ignore compiled TS output
-lib
+dist
 
 .test
 coverage

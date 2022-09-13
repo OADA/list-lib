@@ -15,8 +15,8 @@
  * limitations under the License.
  */
 
-import { Change, ConnectionResponse, OADAClient } from '@oada/client';
-import type { WatchResponse } from '@oada/client/dist/client.js';
+import type { Change, ConnectionResponse } from '@oada/client';
+import { OADAClient } from '@oada/client';
 import { createStubInstance } from 'sinon';
 
 export const emptyResponse: ConnectionResponse = {
@@ -38,7 +38,7 @@ export function createStub() {
   conn.put.resolves(emptyResponse);
   conn.post.resolves(emptyResponse);
   conn.delete.resolves(emptyResponse);
-  const watch: WatchResponse<readonly Change[]> = {
+  const watch = {
     ...emptyResponse,
     changes: (async function* () {
       const change: Change = {

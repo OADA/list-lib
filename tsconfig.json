@@ -4,8 +4,8 @@
     "files": true
   },
   "compilerOptions": {
-    "module": "es2020",
-    "moduleResolution": "node",
+    "module": "node16",
+    "moduleResolution": "node16",
     "composite": true,
     "declaration": true,
     "rootDir": "src",

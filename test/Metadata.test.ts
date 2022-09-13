@@ -25,7 +25,10 @@ import type { PUTRequest } from '@oada/client';
 
 import { createStub, emptyResponse } from './conn-stub.js';
 
-import { Change, ListWatch } from '../';
+// eslint-disable-next-line node/no-extraneous-import
+import type { Change } from '@oada/list-lib';
+// eslint-disable-next-line node/no-extraneous-import
+import { ListWatch } from '@oada/list-lib';
 
 const name = 'oada-list-lib-test';
 
@@ -34,7 +37,7 @@ test('should resume from last rev', async (t) => {
   // A Change from adding an item to a list
   // TODO: Better way to do this test without actually running oada?
   const path = '/bookmarks';
-  const rev = '766';
+  const rev = 766;
 
   // @ts-expect-error test
   conn.get.resolves({ data: { rev } });
@@ -118,7 +121,7 @@ test('should persist rev to _meta', async (t) => {
   t.assert(
     conn.put.calledWithMatch({
       path: `${path}/_meta/oada-list-lib/${name}`,
-      data: { rev: '4' },
+      data: { rev: 4 },
     } as PUTRequest)
   );
 });
