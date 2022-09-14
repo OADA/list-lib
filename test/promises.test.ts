@@ -15,8 +15,6 @@
  * limitations under the License.
  */
 
-import { setTimeout } from 'isomorphic-timers-promises';
-import { spy } from 'sinon';
 import test from 'ava';
 
 import { createStub, emptyResponse } from './conn-stub.js';
@@ -28,28 +26,9 @@ import { ChangeType, ListWatch } from '@oada/list-lib';
 
 const name = 'oada-list-lib-test';
 
-const delay = 100;
-
-test('it should WATCH given path', async (t) => {
-  const conn = createStub();
-  const path = '/bookmarks/foo/bar';
-
-  // eslint-disable-next-line no-new
-  new ListWatch({ path, name, conn });
-  t.plan(1);
-
-  // TODO: How to do this right in ava?
-  await setTimeout(delay);
-
-  t.is(conn.watch.firstCall?.args?.[0]?.path, path);
-});
-
-test.todo('it should reconnect WATCH');
-
 test('it should detect new item', async (t) => {
   const conn = createStub();
   // A Change from adding an item to a list
-  // TODO: Better way to do this test without actually running oada?
   const path = '/bookmarks';
   const id = 'resources/foo';
   // @ts-expect-error test
@@ -75,12 +54,6 @@ test('it should detect new item', async (t) => {
   // @ts-expect-error test
   conn.get.resolves({ data: { _rev: 4 } });
 
-  // Create spies to see which events are emitted
-  const onAddItem = spy();
-  const onChangeItem = spy();
-  const onItem = spy();
-  const onRemoveItem = spy();
-
   async function* changes() {
     yield change;
     yield change;
@@ -97,18 +70,11 @@ test('it should detect new item', async (t) => {
     name,
     conn,
   });
-  watch.on(ChangeType.ItemAdded, onAddItem);
-  watch.on(ChangeType.ItemChanged, onChangeItem);
-  watch.on(ChangeType.ItemAny, onItem);
-  watch.on(ChangeType.ItemRemoved, onRemoveItem);
+  const add = watch.once(ChangeType.ItemAdded);
+  const item = watch.once(ChangeType.ItemAny);
 
-  // TODO: How to do this right in ava?
-  await setTimeout(delay);
-
-  t.is(onAddItem.callCount, 1);
-  t.is(onItem.callCount, 1);
-  t.is(onChangeItem.callCount, 0);
-  t.is(onRemoveItem.callCount, 0);
+  await t.notThrowsAsync(add);
+  await t.notThrowsAsync(item);
 });
 
 test('it should detect removed item', async (t) => {
@@ -133,12 +99,6 @@ test('it should detect removed item', async (t) => {
     },
   ];
 
-  // Create spies to see which events are emitted
-  const onAddItem = spy();
-  const onChangeItem = spy();
-  const onItem = spy();
-  const onRemoveItem = spy();
-
   async function* changes() {
     yield change;
     yield change;
@@ -155,18 +115,9 @@ test('it should detect removed item', async (t) => {
     name,
     conn,
   });
-  watch.on(ChangeType.ItemAdded, onAddItem);
-  watch.on(ChangeType.ItemChanged, onChangeItem);
-  watch.on(ChangeType.ItemAny, onItem);
-  watch.on(ChangeType.ItemRemoved, onRemoveItem);
+  const removed = watch.once(ChangeType.ItemRemoved);
 
-  // TODO: How to do this right in ava?
-  await setTimeout(delay);
-
-  t.is(onAddItem.callCount, 0);
-  t.is(onItem.callCount, 0);
-  t.is(onChangeItem.callCount, 0);
-  t.is(onRemoveItem.callCount, 1);
+  await t.notThrowsAsync(removed);
 });
 
 test.todo('it should detect modified item');

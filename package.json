@@ -51,7 +51,6 @@
       "text",
       "lcov"
     ],
-    "all": true,
     "src": "src",
     "exclude": [
       "*.d.ts",
