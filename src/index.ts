@@ -321,25 +321,36 @@ export class ListWatch<Item = unknown> {
     }
   }
 
+  public on<E extends ChangeType>(event: E): AsyncGenerator<ItemType<E, Item>>;
+  public on<E extends ChangeType>(
+    event: E,
+    listener: (itemChange: ItemType<E, Item>) => void | PromiseLike<void>
+  ): this;
   public on<E extends ChangeType>(
     event: E,
     listener?: (itemChange: ItemType<E, Item>) => void | PromiseLike<void>
   ) {
     if (listener) {
       this.#emitter.on(event, this.#wrapListener(event, listener));
-      return undefined as void;
+      return this;
     }
 
     return this.#generate(event);
   }
 
+  public once<E extends ChangeType>(event: E): Promise<ItemType<E, Item>>;
+  public once<E extends ChangeType>(
+    event: E,
+    listener: (itemChange: ItemEvent<Item>) => void | PromiseLike<void>
+  ): this;
+  // eslint-disable-next-line @typescript-eslint/promise-function-async
   public once<E extends ChangeType>(
     event: E,
     listener?: (itemChange: ItemEvent<Item>) => void | PromiseLike<void>
   ) {
     if (listener) {
       this.#emitter.once(event, this.#wrapListener(event, listener));
-      return;
+      return this;
     }
 
     return this.#once(event);

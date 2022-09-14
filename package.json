@@ -64,7 +64,7 @@
     "@oada/client": "^4.3.2",
     "@tsconfig/node14": "^1.0.3",
     "@types/debug": "^4.1.7",
-    "@types/node": "^16.11.58",
+    "@types/node": "^16.11.59",
     "@types/object-assign-deep": "^0.4.0",
     "@types/sinon": "^10.0.13",
     "@typescript-eslint/eslint-plugin": "^5.37.0",

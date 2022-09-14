@@ -24,27 +24,11 @@ import { createStub, emptyResponse } from './conn-stub.js';
 // eslint-disable-next-line node/no-extraneous-import
 import type { Change } from '@oada/list-lib';
 // eslint-disable-next-line node/no-extraneous-import
-import { ChangeType, ListWatch } from '@oada/list-lib';
+import { ListWatch } from '@oada/list-lib';
 
 const name = 'oada-list-lib-test';
 
 const delay = 100;
-
-test('it should WATCH given path', async (t) => {
-  const conn = createStub();
-  const path = '/bookmarks/foo/bar';
-
-  // eslint-disable-next-line no-new
-  new ListWatch({ path, name, conn });
-  t.plan(1);
-
-  // TODO: How to do this right in ava?
-  await setTimeout(delay);
-
-  t.is(conn.watch.firstCall?.args?.[0]?.path, path);
-});
-
-test.todo('it should reconnect WATCH');
 
 test('it should detect new item', async (t) => {
   const conn = createStub();
@@ -75,11 +59,16 @@ test('it should detect new item', async (t) => {
   // @ts-expect-error test
   conn.get.resolves({ data: { _rev: 4 } });
 
-  // Create spies to see which events are emitted
-  const onAddItem = spy();
-  const onChangeItem = spy();
-  const onItem = spy();
-  const onRemoveItem = spy();
+  const options = {
+    path,
+    name,
+    conn,
+    // Create spies to see which callbacks run
+    onAddItem: spy(),
+    onChangeItem: spy(),
+    onItem: spy(),
+    onRemoveItem: spy(),
+  };
 
   async function* changes() {
     yield change;
@@ -92,23 +81,15 @@ test('it should detect new item', async (t) => {
     changes: changes(),
   });
 
-  const watch = new ListWatch({
-    path,
-    name,
-    conn,
-  });
-  watch.on(ChangeType.ItemAdded, onAddItem);
-  watch.on(ChangeType.ItemChanged, onChangeItem);
-  watch.on(ChangeType.ItemAny, onItem);
-  watch.on(ChangeType.ItemRemoved, onRemoveItem);
-
+  // eslint-disable-next-line no-new
+  new ListWatch(options);
   // TODO: How to do this right in ava?
   await setTimeout(delay);
 
-  t.is(onAddItem.callCount, 1);
-  t.is(onItem.callCount, 1);
-  t.is(onChangeItem.callCount, 0);
-  t.is(onRemoveItem.callCount, 0);
+  t.is(options.onAddItem.callCount, 1);
+  t.is(options.onItem.callCount, 1);
+  t.is(options.onChangeItem.callCount, 0);
+  t.is(options.onRemoveItem.callCount, 0);
 });
 
 test('it should detect removed item', async (t) => {
@@ -133,11 +114,16 @@ test('it should detect removed item', async (t) => {
     },
   ];
 
-  // Create spies to see which events are emitted
-  const onAddItem = spy();
-  const onChangeItem = spy();
-  const onItem = spy();
-  const onRemoveItem = spy();
+  const options = {
+    path,
+    name,
+    conn,
+    // Create spies to see which callbacks run
+    onAddItem: spy(),
+    onChangeItem: spy(),
+    onItem: spy(),
+    onRemoveItem: spy(),
+  };
 
   async function* changes() {
     yield change;
@@ -150,23 +136,15 @@ test('it should detect removed item', async (t) => {
     changes: changes(),
   });
 
-  const watch = new ListWatch({
-    path,
-    name,
-    conn,
-  });
-  watch.on(ChangeType.ItemAdded, onAddItem);
-  watch.on(ChangeType.ItemChanged, onChangeItem);
-  watch.on(ChangeType.ItemAny, onItem);
-  watch.on(ChangeType.ItemRemoved, onRemoveItem);
-
+  // eslint-disable-next-line no-new
+  new ListWatch(options);
   // TODO: How to do this right in ava?
   await setTimeout(delay);
 
-  t.is(onAddItem.callCount, 0);
-  t.is(onItem.callCount, 0);
-  t.is(onChangeItem.callCount, 0);
-  t.is(onRemoveItem.callCount, 1);
+  t.is(options.onAddItem.callCount, 0);
+  t.is(options.onItem.callCount, 0);
+  t.is(options.onChangeItem.callCount, 0);
+  t.is(options.onRemoveItem.callCount, 1);
 });
 
 test.todo('it should detect modified item');
