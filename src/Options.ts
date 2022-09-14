@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Open Ag Data Alliance
+ * Copyright 2021-2022 Open Ag Data Alliance
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,7 +15,15 @@
  * limitations under the License.
  */
 
-import type { AssumeState, Change, TypeAssert } from './index.js';
+import type {
+  AssumeState,
+  Change,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- for TSDoc
+  ChangeType,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- for TSDoc
+  ListWatch,
+  TypeAssert,
+} from './index.js';
 
 import type { OADAClient } from '@oada/client';
 
@@ -28,7 +36,7 @@ type AllowPromise<T> = T | PromiseLike<T>;
  * The type for the object given to the constructor
  *
  * @public
- * @typeParam Item  The type of the items linked in the list
+ * @typeParam Item The type of the items linked in the list
  * @see ListWatch
  */
 export interface Options<Item> {
@@ -60,14 +68,12 @@ export interface Options<Item> {
    * An OADAClient instance (or something with the same API)
    */
   conn: Conn;
-
   /**
    * How frequently to save state to OADA (in ms)
    *
    * @default 1000
    */
   persistInterval?: number;
-
   /**
    * Function to assert if an object is an Item.
    * Items which fail this check will be ignored.
@@ -75,13 +81,23 @@ export interface Options<Item> {
    * @default assume all items are type Item
    */
   assertItem?: TypeAssert<Item>;
+  /**
+   * Called when the list in new to this lib (i.e., we have no _meta about it)
+   */
+  onNewList?: AssumeState;
+}
 
+/**
+ * @deprecated
+ */
+export interface OptionsDeprecated<Item> {
   /**
    * Called when a new item is added to the list
    *
    * @param item The resource for the new item
    * @param id The list key `item` is linked under (not the OADA `_id`)
-   * @deprecated
+   *
+   * @deprecated Use {@link ListWatch.on} with {@link ChangeType.ItemAdded} instead
    */
   onAddItem?: (item: Item, id: string) => AllowPromise<void>;
   /**
@@ -89,7 +105,8 @@ export interface Options<Item> {
    *
    * @param change The change to the item
    * @param id The list key the item is linked under (not the OADA `_id`)
-   * @deprecated
+   *
+   * @deprecated Use {@link ListWatch.on} with {@link ChangeType.ItemChanged} instead
    */
   onChangeItem?: (change: Change, id: string) => AllowPromise<void>;
   /**
@@ -97,25 +114,18 @@ export interface Options<Item> {
    *
    * @param item The resource for the new item
    * @param id The list key `item` is linked under (not the OADA `_id`)
-   * @deprecated
+   *
+   * @deprecated Use {@link ListWatch.on} with {@link ChangeType.ItemAny} instead
    */
   onItem?: (item: Item, id: string) => Promise<void>;
   /**
    * Called when an item is removed from the list
    *
    * @param id The list key the item was linked under (not the OADA `_id`)
-   * @deprecated
+   *
+   * @deprecated Use {@link ListWatch.on} with {@link ChangeType.ItemRemoved} instead
    */
   onRemoveItem?: (id: string) => AllowPromise<void>;
-  /**
-   * Called when the list itself is deleted
-   * @deprecated
-   */
-  onDeleteList?: () => AllowPromise<void>;
-  /**
-   * Called when the list in new to this lib (i.e., we have no _meta about it)
-   */
-  onNewList?: AssumeState;
 }
 
 /**

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Open Ag Data Alliance
+ * Copyright 2021-2022 Open Ag Data Alliance
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,8 +30,8 @@ import type { Link } from '@oada/types/oada/link/v1.js';
 import type Resource from '@oada/types/oada/resource.js';
 import type V2Changes from '@oada/types/oada/change/v2.js';
 
+import type { Options, OptionsDeprecated } from './Options.js';
 import { Metadata } from './Metadata.js';
-import type { Options } from './Options.js';
 
 const log = {
   trace: debug('oada-list-lib:trace'),
@@ -201,6 +201,14 @@ export class ListWatch<Item = unknown> {
 
   #emitter;
 
+  constructor(options: Options<Item>);
+  /**
+   * @deprecated
+   * see {@link Options} for the non-deprecated options
+   * and {@link OptionsDeprecated} for alternatives to deprecated options
+   */
+  // eslint-disable-next-line @typescript-eslint/unified-signatures
+  constructor(options: Options<Item> & OptionsDeprecated<Item>);
   constructor({
     path,
     itemsPath = '$.*',
@@ -215,7 +223,7 @@ export class ListWatch<Item = unknown> {
     onItem,
     onRemoveItem,
     onNewList,
-  }: Options<Item>) {
+  }: Options<Item> & OptionsDeprecated<Item>) {
     this.path = path;
     this.itemsPath = itemsPath;
     this.name = name;

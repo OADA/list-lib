@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2021 Open Ag Data Alliance
+ * Copyright 2021-2022 Open Ag Data Alliance
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -23,7 +23,7 @@ import debug from 'debug';
 
 import type { Json } from '@oada/client';
 
-import { assertNever, AssumeState } from './index.js';
+import { AssumeState, assertNever } from './index.js';
 import type { Conn } from './Options.js';
 
 const log = {
@@ -104,7 +104,7 @@ export class Metadata {
     this.#conn = conn;
     this.#path = join(path, '_meta', Metadata.META_KEY, name);
 
-    // TODO: Use timeouts for all updates?
+    // ??? Use timeouts for all updates?
     const revUpdateInterval = setInterval(100);
     const updateRevs = async () => {
       for await (const _ of revUpdateInterval) {
