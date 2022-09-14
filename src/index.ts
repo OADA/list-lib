@@ -87,7 +87,7 @@ export interface ItemChange<Item = never> extends ItemEvent<Item> {
 }
 
 const changeSym = Symbol('change');
-type Foo<T> = T & {
+type ChangeBody<T> = T & {
   [changeSym]?: Array<Readonly<Change>>;
 };
 interface Result<T, P = unknown> {
@@ -150,6 +150,34 @@ function translateDelete(body: Json): Json | undefined {
       translateDelete(value!) as Json,
     ])
   );
+}
+
+/**
+ * Construct object representing the change tree
+ */
+function buildChangeObject(rootChange: Change, ...children: Change[]) {
+  const changeBody: ChangeBody<unknown> = {
+    [changeSym]: [rootChange],
+    ...(rootChange.type === 'delete'
+      ? (translateDelete(rootChange.body as Json) as JsonObject)
+      : rootChange.body),
+  };
+  for (const change of children) {
+    const ptr = JsonPointer.create(change.path);
+    const old = ptr.get(changeBody) as ChangeBody<unknown>;
+    // eslint-disable-next-line security/detect-object-injection
+    const changes = old?.[changeSym] ?? [];
+    const body =
+      change.type === 'delete'
+        ? translateDelete(change.body as Json)
+        : change.body;
+    const merged = objectAssignDeep(old ?? {}, body, {
+      [changeSym]: [...changes, change],
+    });
+    ptr.set(changeBody, merged, true);
+  }
+
+  return changeBody;
 }
 
 export const enum AssumeState {
@@ -485,6 +513,64 @@ export class ListWatch<Item = unknown> {
     return changes;
   }
 
+  /**
+   * Iterate though chid changes to list items
+   */
+  async #handleItemChanges(changeBody: ChangeBody<unknown>, listRev: number) {
+    // eslint-disable-next-line new-cap
+    const items = JSONPath<Array<Result<ChangeBody<Item>>>>({
+      resultType: 'all',
+      path: this.itemsPath,
+      json: changeBody,
+    });
+    for await (const { value, pointer } of items) {
+      if (value === undefined) {
+        // Item was removed from list
+        const itemChange: ItemEvent<Item> = {
+          listRev,
+          pointer,
+        };
+        await this.#emit(ChangeType.ItemRemoved, itemChange);
+        continue;
+      }
+
+      const { [changeSym]: changes } = value;
+      if (!changes && '_id' in value) {
+        // Item was added to list?
+        const itemChange: ItemEvent<Item> = {
+          listRev,
+          pointer,
+        };
+        await this.#emit(ChangeType.ItemAdded, itemChange);
+        continue;
+      }
+
+      for await (const change of changes ?? []) {
+        log.trace({ change }, 'Received change');
+        const rev = Number(
+          // @ts-expect-error just do it
+          change.body?._meta?._rev ?? change.body?._rev
+        );
+
+        // ???: Find any children of change
+        // const changes = [change];
+        const itemChange: ItemChange = {
+          rev,
+          listRev,
+          pointer,
+          change: {
+            ...change,
+            // Adust change path to start at this item
+            path: change.path.slice(pointer.length),
+          },
+        };
+
+        // Emit generic item change event
+        await this.#emit(ChangeType.ItemChanged, itemChange);
+      }
+    }
+  }
+
   async #handleChangeFeed(
     watch: AsyncIterable<ReadonlyArray<Readonly<Change>>>
   ): Promise<never> {
@@ -507,81 +593,8 @@ export class ListWatch<Item = unknown> {
         break;
       }
 
-      // Construct object representing the change tree?
-      const changeBody: Foo<unknown> = {
-        [changeSym]: [rootChange!],
-        ...(rootChange!.type === 'delete'
-          ? (translateDelete(rootChange!.body as Json) as JsonObject)
-          : rootChange!.body),
-      };
-      for (const change of children) {
-        const ptr = JsonPointer.create(change.path);
-        const old = ptr.get(changeBody) as Foo<unknown>;
-        // eslint-disable-next-line security/detect-object-injection
-        const changes = old?.[changeSym] ?? [];
-        const body =
-          change.type === 'delete'
-            ? translateDelete(change.body as Json)
-            : change.body;
-        const merged = objectAssignDeep(old ?? {}, body, {
-          [changeSym]: [...changes, change],
-        });
-        ptr.set(changeBody, merged, true);
-      }
-
-      // Iterate though chid changes to list items
-      // eslint-disable-next-line new-cap
-      const items = JSONPath<Array<Result<Foo<Item>>>>({
-        resultType: 'all',
-        path: this.itemsPath,
-        json: changeBody,
-      });
-      for await (const { value, pointer } of items) {
-        if (value === undefined) {
-          // Item was removed from list
-          const itemChange: ItemEvent<Item> = {
-            listRev,
-            pointer,
-          };
-          await this.#emit(ChangeType.ItemRemoved, itemChange);
-          continue;
-        }
-
-        const { [changeSym]: changes } = value;
-        if (!changes && '_id' in value) {
-          // Item was added to list?
-          const itemChange: ItemEvent<Item> = {
-            listRev,
-            pointer,
-          };
-          await this.#emit(ChangeType.ItemAdded, itemChange);
-          continue;
-        }
-
-        for await (const change of changes ?? []) {
-          log.trace({ change }, 'Received change');
-          const rev = Number(
-            // @ts-expect-error just do it
-            change.body?._meta?._rev ?? change.body?._rev
-          );
-
-          // ???: Find any children of change
-          // const changes = [change];
-          const itemChange: ItemChange = {
-            rev,
-            listRev,
-            pointer,
-            change: {
-              ...change,
-              // Adust change path to start at this item
-              path: change.path.slice(pointer.length),
-            },
-          };
-
-          // Emit generic item change event
-          await this.#emit(ChangeType.ItemChanged, itemChange);
-        }
-      }
+      const changeBody = buildChangeObject(rootChange!, ...children);
+      await this.#handleItemChanges(changeBody, listRev);
 
       if (this.#meta) {
         log.trace(
