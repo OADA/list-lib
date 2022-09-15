@@ -180,7 +180,6 @@ export class Metadata {
   /**
    * Initialize the connection to the meta resource
    * @returns whether existing metadata was found
-   *
    * @TODO I hate needing to call init...
    */
   async init(assume: AssumeState): Promise<boolean> {

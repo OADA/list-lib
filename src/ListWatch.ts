@@ -59,7 +59,7 @@ const log = {
  * Watches an OADA list and calls various callbacks when appropriate.
  *
  * @public
- * @typeParam Item  The type of the items linked in the list
+ * @typeParam Item The type of the items linked in the list
  * @see Options
  */
 export class ListWatch<Item = unknown> {
@@ -67,34 +67,31 @@ export class ListWatch<Item = unknown> {
    * Make ListWatch consider every unknown `Item` new
    * @deprecated
    */
-  public static readonly AssumeNew = AssumeState.New;
+  static readonly AssumeNew = AssumeState.New;
   /**
    * Make ListWatch consider every unknown `Item` handled
    * @deprecated
    */
-  public static readonly AssumeHandled = AssumeState.Handled;
+  static readonly AssumeHandled = AssumeState.Handled;
 
   /**
    * The OADA path of the List being watched
    */
-  public readonly path;
+  readonly path;
   /**
    * The JSON Path for the list items
    */
-  public readonly itemsPath;
+  readonly itemsPath;
   /**
    * The unique name of this service/watch
    */
-  public readonly name;
+  readonly name;
 
   #conn;
   #watch;
-  #assertItem;
-
-  // _meta stuff
   #meta;
-
   #emitter;
+  #assertItem;
 
   constructor(options: Options<Item>);
   /**
@@ -224,12 +221,12 @@ export class ListWatch<Item = unknown> {
     }
   }
 
-  public on<E extends ChangeType>(event: E): AsyncGenerator<ItemType<E, Item>>;
-  public on<E extends ChangeType>(
+  on<E extends ChangeType>(event: E): AsyncGenerator<ItemType<E, Item>>;
+  on<E extends ChangeType>(
     event: E,
     listener: (itemChange: ItemType<E, Item>) => void | PromiseLike<void>
   ): this;
-  public on<E extends ChangeType>(
+  on<E extends ChangeType>(
     event: E,
     listener?: (itemChange: ItemType<E, Item>) => void | PromiseLike<void>
   ) {
@@ -241,13 +238,13 @@ export class ListWatch<Item = unknown> {
     return this.#generate(event);
   }
 
-  public once<E extends ChangeType>(event: E): Promise<ItemType<E, Item>>;
-  public once<E extends ChangeType>(
+  once<E extends ChangeType>(event: E): Promise<ItemType<E, Item>>;
+  once<E extends ChangeType>(
     event: E,
     listener: (itemChange: ItemEvent<Item>) => void | PromiseLike<void>
   ): this;
   // eslint-disable-next-line @typescript-eslint/promise-function-async
-  public once<E extends ChangeType>(
+  once<E extends ChangeType>(
     event: E,
     listener?: (itemChange: ItemEvent<Item>) => void | PromiseLike<void>
   ) {
@@ -319,21 +316,13 @@ export class ListWatch<Item = unknown> {
   /**
    * Clean up metadata and unwatch list
    */
-  public async stop() {
-    const watch = await this.#watch;
-    if (watch.return) {
-      await watch.return();
+  async stop() {
+    try {
+      const watch = await this.#watch;
+      await watch.return?.();
+    } finally {
+      await this.#meta?.stop();
     }
-
-    await this.#meta?.stop();
-  }
-
-  /**
-   * Persist relevant info to the `_meta` of the list.
-   * This preserves it across restarts.
-   */
-  public async persistMeta() {
-    // Await this.#meta.persist();
   }
 
   /**
