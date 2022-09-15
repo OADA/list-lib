@@ -23,21 +23,21 @@ import debug from 'debug';
 
 import type { Json } from '@oada/client';
 
-import { AssumeState, assertNever } from './index.js';
+import { AssumeState } from './index.js';
 import type { Conn } from './Options.js';
+import { assertNever } from './util.js';
 
 const log = {
-  trace: debug('oada-list-lib#metadata:trace'),
-  debug: debug('oada-list-lib#metadata:debug'),
-  info: debug('oada-list-lib#metadata:info'),
-  warn: debug('oada-list-lib#metadata:warn'),
-  error: debug('oada-list-lib#metadata:error'),
-  fatal: debug('oada-list-lib#metadata:fatal'),
+  trace: debug('@oada/list-lib#metadata:trace'),
+  debug: debug('@oada/list-lib#metadata:debug'),
+  info: debug('@oada/list-lib#metadata:info'),
+  warn: debug('@oada/list-lib#metadata:warn'),
+  error: debug('@oada/list-lib#metadata:error'),
+  fatal: debug('@oada/list-lib#metadata:fatal'),
 };
 
 /**
  * Record of a successfully handled list item
- *
  * @internal
  */
 export type Item = Record<
@@ -49,7 +49,6 @@ export type Item = Record<
 
 /**
  * Record of successfully handled list items
- *
  * @internal
  */
 export interface Items {
@@ -66,7 +65,6 @@ export interface Meta {
 
 /**
  * Persistent data we store in the _meta of the list
- *
  * @internal
  */
 export class Metadata {

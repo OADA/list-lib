@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import type { OADAClient } from '@oada/client';
+
 import type {
   AssumeState,
   Change,
@@ -24,8 +26,6 @@ import type {
   ListWatch,
   TypeAssert,
 } from './index.js';
-
-import type { OADAClient } from '@oada/client';
 
 /**
  * Type that can be either T or a Promise which resolves to T
