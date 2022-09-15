@@ -80,7 +80,6 @@ test('it should detect new item', async (t) => {
 test('it should detect removed item', async (t) => {
   const conn = createStub();
   // A Change from adding an item to a list
-  // TODO: Better way to do this test without actually running oada?
   const path = '/bookmarks';
   const change: Change[] = [
     {
@@ -120,4 +119,65 @@ test('it should detect removed item', async (t) => {
   await t.notThrowsAsync(removed);
 });
 
-test.todo('it should detect modified item');
+test('it should detect modified item', async (t) => {
+  const conn = createStub();
+  // A Change from adding an item to a list
+  const path = '/bookmarks';
+  const id = 'resources/foo';
+  // @ts-expect-error test
+  conn.get.resolves({ data: { _id: id } });
+  const change: Change[] = [
+    {
+      resource_id: 'resources/default:resources_bookmarks_321',
+      path: '',
+      body: {
+        abc123: { _rev: 4 },
+        _meta: {
+          modifiedBy: 'users/default:users_sam_321',
+          modified: 1_593_642_877.725,
+          _rev: 4,
+        },
+        _rev: 4,
+      },
+      type: 'merge',
+    },
+    {
+      resource_id: 'resources/abc123',
+      path: '/abc123',
+      body: {
+        foo: 'bar',
+        _meta: {
+          modifiedBy: 'users/default:users_sam_321',
+          modified: 1_593_642_877.725,
+          _rev: 4,
+        },
+        _rev: 4,
+      },
+      type: 'merge',
+    },
+  ];
+  // @ts-expect-error test
+  conn.get.resolves({ data: { _rev: 4 } });
+
+  async function* changes() {
+    yield change;
+    yield change;
+  }
+
+  // @ts-expect-error bs from deprecated v2 API
+  conn.watch.resolves({
+    ...emptyResponse,
+    changes: changes(),
+  });
+
+  const watch = new ListWatch({
+    path,
+    name,
+    conn,
+  });
+  const modified = watch.once(ChangeType.ItemChanged);
+  const item = watch.once(ChangeType.ItemAny);
+
+  await t.notThrowsAsync(modified);
+  await t.notThrowsAsync(item);
+});

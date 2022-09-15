@@ -38,7 +38,6 @@ test('it should WATCH given path', async (t) => {
   new ListWatch({ path, name, conn });
   t.plan(1);
 
-  // TODO: How to do this right in ava?
   await setTimeout(delay);
 
   t.is(conn.watch.firstCall?.args?.[0]?.path, path);
@@ -49,7 +48,6 @@ test.todo('it should reconnect WATCH');
 test('it should detect new item', async (t) => {
   const conn = createStub();
   // A Change from adding an item to a list
-  // TODO: Better way to do this test without actually running oada?
   const path = '/bookmarks';
   const id = 'resources/foo';
   // @ts-expect-error test
@@ -102,7 +100,6 @@ test('it should detect new item', async (t) => {
   watch.on(ChangeType.ItemAny, onItem);
   watch.on(ChangeType.ItemRemoved, onRemoveItem);
 
-  // TODO: How to do this right in ava?
   await setTimeout(delay);
 
   t.is(onAddItem.callCount, 1);
@@ -114,7 +111,6 @@ test('it should detect new item', async (t) => {
 test('it should detect removed item', async (t) => {
   const conn = createStub();
   // A Change from adding an item to a list
-  // TODO: Better way to do this test without actually running oada?
   const path = '/bookmarks';
   const change: Change[] = [
     {
@@ -160,7 +156,6 @@ test('it should detect removed item', async (t) => {
   watch.on(ChangeType.ItemAny, onItem);
   watch.on(ChangeType.ItemRemoved, onRemoveItem);
 
-  // TODO: How to do this right in ava?
   await setTimeout(delay);
 
   t.is(onAddItem.callCount, 0);
@@ -169,4 +164,77 @@ test('it should detect removed item', async (t) => {
   t.is(onRemoveItem.callCount, 1);
 });
 
-test.todo('it should detect modified item');
+test('it should detect modified item', async (t) => {
+  const conn = createStub();
+  // A Change from adding an item to a list
+  const path = '/bookmarks';
+  const id = 'resources/foo';
+  // @ts-expect-error test
+  conn.get.resolves({ data: { _id: id } });
+  const change: Change[] = [
+    {
+      resource_id: 'resources/default:resources_bookmarks_321',
+      path: '',
+      body: {
+        abc123: { _rev: 4 },
+        _meta: {
+          modifiedBy: 'users/default:users_sam_321',
+          modified: 1_593_642_877.725,
+          _rev: 4,
+        },
+        _rev: 4,
+      },
+      type: 'merge',
+    },
+    {
+      resource_id: 'resources/abc123',
+      path: '/abc123',
+      body: {
+        foo: 'bar',
+        _meta: {
+          modifiedBy: 'users/default:users_sam_321',
+          modified: 1_593_642_877.725,
+          _rev: 4,
+        },
+        _rev: 4,
+      },
+      type: 'merge',
+    },
+  ];
+  // @ts-expect-error test
+  conn.get.resolves({ data: { _rev: 4 } });
+
+  // Create spies to see which events are emitted
+  const onAddItem = spy();
+  const onChangeItem = spy();
+  const onItem = spy();
+  const onRemoveItem = spy();
+
+  async function* changes() {
+    yield change;
+    yield change;
+  }
+
+  // @ts-expect-error bs from deprecated v2 API
+  conn.watch.resolves({
+    ...emptyResponse,
+    changes: changes(),
+  });
+
+  const watch = new ListWatch({
+    path,
+    name,
+    conn,
+  });
+  watch.on(ChangeType.ItemAdded, onAddItem);
+  watch.on(ChangeType.ItemChanged, onChangeItem);
+  watch.on(ChangeType.ItemAny, onItem);
+  watch.on(ChangeType.ItemRemoved, onRemoveItem);
+
+  await setTimeout(delay);
+
+  t.is(onAddItem.callCount, 0);
+  t.is(onItem.callCount, 1);
+  t.is(onChangeItem.callCount, 1);
+  t.is(onRemoveItem.callCount, 0);
+});

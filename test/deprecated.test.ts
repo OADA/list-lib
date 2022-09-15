@@ -33,7 +33,6 @@ const delay = 100;
 test('it should detect new item', async (t) => {
   const conn = createStub();
   // A Change from adding an item to a list
-  // TODO: Better way to do this test without actually running oada?
   const path = '/bookmarks';
   const id = 'resources/foo';
   // @ts-expect-error test
@@ -83,7 +82,7 @@ test('it should detect new item', async (t) => {
 
   // eslint-disable-next-line no-new
   new ListWatch(options);
-  // TODO: How to do this right in ava?
+
   await setTimeout(delay);
 
   t.is(options.onAddItem.callCount, 1);
@@ -95,7 +94,6 @@ test('it should detect new item', async (t) => {
 test('it should detect removed item', async (t) => {
   const conn = createStub();
   // A Change from adding an item to a list
-  // TODO: Better way to do this test without actually running oada?
   const path = '/bookmarks';
   const change: Change[] = [
     {
@@ -138,7 +136,7 @@ test('it should detect removed item', async (t) => {
 
   // eslint-disable-next-line no-new
   new ListWatch(options);
-  // TODO: How to do this right in ava?
+
   await setTimeout(delay);
 
   t.is(options.onAddItem.callCount, 0);
@@ -147,4 +145,75 @@ test('it should detect removed item', async (t) => {
   t.is(options.onRemoveItem.callCount, 1);
 });
 
-test.todo('it should detect modified item');
+test('it should detect modified item', async (t) => {
+  const conn = createStub();
+  // A Change from adding an item to a list
+  const path = '/bookmarks';
+  const id = 'resources/foo';
+  // @ts-expect-error test
+  conn.get.resolves({ data: { _id: id } });
+  const change: Change[] = [
+    {
+      resource_id: 'resources/default:resources_bookmarks_321',
+      path: '',
+      body: {
+        abc123: { _rev: 4 },
+        _meta: {
+          modifiedBy: 'users/default:users_sam_321',
+          modified: 1_593_642_877.725,
+          _rev: 4,
+        },
+        _rev: 4,
+      },
+      type: 'merge',
+    },
+    {
+      resource_id: 'resources/abc123',
+      path: '/abc123',
+      body: {
+        foo: 'bar',
+        _meta: {
+          modifiedBy: 'users/default:users_sam_321',
+          modified: 1_593_642_877.725,
+          _rev: 4,
+        },
+        _rev: 4,
+      },
+      type: 'merge',
+    },
+  ];
+  // @ts-expect-error test
+  conn.get.resolves({ data: { _rev: 4 } });
+
+  const options = {
+    path,
+    name,
+    conn,
+    // Create spies to see which callbacks run
+    onAddItem: spy(),
+    onChangeItem: spy(),
+    onItem: spy(),
+    onRemoveItem: spy(),
+  };
+
+  async function* changes() {
+    yield change;
+    yield change;
+  }
+
+  // @ts-expect-error bs from deprecated v2 API
+  conn.watch.resolves({
+    ...emptyResponse,
+    changes: changes(),
+  });
+
+  // eslint-disable-next-line no-new
+  new ListWatch(options);
+
+  await setTimeout(delay);
+
+  t.is(options.onAddItem.callCount, 0);
+  t.is(options.onItem.callCount, 1);
+  t.is(options.onChangeItem.callCount, 1);
+  t.is(options.onRemoveItem.callCount, 0);
+});
