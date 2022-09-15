@@ -325,8 +325,7 @@ export class ListWatch<Item = unknown> {
       await watch.return();
     }
 
-    await this.persistMeta();
-    // This.#meta.stop();
+    await this.#meta?.stop();
   }
 
   /**

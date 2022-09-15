@@ -17,6 +17,8 @@
 
 import { inspect } from 'node:util';
 import { join } from 'node:path';
+
+import { AbortController } from 'abort-controller';
 import { setInterval } from 'isomorphic-timers-promises';
 
 import debug from 'debug';
@@ -86,6 +88,8 @@ export class Metadata {
   #conn;
   #path;
   #initialized = false;
+  #controller;
+  #updates;
 
   constructor({
     conn,
@@ -101,31 +105,42 @@ export class Metadata {
   }) {
     this.#conn = conn;
     this.#path = join(path, '_meta', Metadata.META_KEY, name);
+    this.#controller = new AbortController();
 
     // ??? Use timeouts for all updates?
-    const revUpdateInterval = setInterval(100);
+    const revUpdateInterval = setInterval(100, undefined, {
+      signal: this.#controller.signal,
+    });
     const updateRevs = async () => {
-      for await (const _ of revUpdateInterval) {
-        if (!this.#initialized || !this.#revDirty) {
-          continue;
+      try {
+        for await (const _ of revUpdateInterval) {
+          await this.#doUpdate();
         }
-
-        log.trace('Recording rev %s', this.#rev);
-        const data: Json = { rev: this.#rev };
-        this.#revDirty = false;
-        try {
-          await this.#conn?.put({
-            path: this.#path,
-            data,
-          });
-        } catch (error: unknown) {
-          log.error({ error }, 'Failed to update rev');
-          this.#revDirty = true;
-        }
+      } finally {
+        await this.#doUpdate();
       }
     };
 
-    void updateRevs();
+    this.#updates = updateRevs();
+  }
+
+  async #doUpdate() {
+    if (!this.#initialized || !this.#revDirty) {
+      return;
+    }
+
+    log.trace('Recording rev %s', this.#rev);
+    const data: Json = { rev: this.#rev };
+    this.#revDirty = false;
+    try {
+      await this.#conn.put({
+        path: this.#path,
+        data,
+      });
+    } catch (error: unknown) {
+      log.error({ error }, 'Failed to update rev');
+      this.#revDirty = true;
+    }
   }
 
   get rev(): number {
@@ -141,6 +156,11 @@ export class Metadata {
     log.trace('Updating local rev to %d', rev);
     this.#rev = rev;
     this.#revDirty = true;
+  }
+
+  async stop() {
+    this.#controller.abort();
+    await this.#updates;
   }
 
   async setErrored(pointer: string, rev: number, error: unknown) {
@@ -163,7 +183,7 @@ export class Metadata {
    *
    * @TODO I hate needing to call init...
    */
-  public async init(assume: AssumeState): Promise<boolean> {
+  async init(assume: AssumeState): Promise<boolean> {
     // Try to get our metadata about this list
     try {
       const { data } = await this.#conn.get({

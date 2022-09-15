@@ -103,6 +103,7 @@
   },
   "dependencies": {
     "@oada/types": "^3.2.1",
+    "abort-controller": "^3.0.0",
     "debug": "^4.3.4",
     "eventemitter3": "^4.0.7",
     "isomorphic-timers-promises": "^1.0.1",
