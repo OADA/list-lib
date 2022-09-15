@@ -107,6 +107,7 @@ export class ListWatch<Item = unknown> {
     name = process.env.npm_package_name!,
     resume = false,
     conn,
+    persistInterval = 1000,
     // If no assert given, assume all items valid
     // eslint-disable-next-line @typescript-eslint/no-empty-function
     assertItem = () => {},
@@ -166,6 +167,7 @@ export class ListWatch<Item = unknown> {
           conn: this.#conn,
           path,
           name,
+          persistInterval,
         })
       : undefined;
     this.#watch = this.#initialize(onNewList);
@@ -221,7 +223,7 @@ export class ListWatch<Item = unknown> {
     }
   }
 
-  on<E extends ChangeType>(event: E): AsyncGenerator<ItemType<E, Item>>;
+  on<E extends ChangeType>(event: E): AsyncGenerator<[ItemType<E, Item>]>;
   on<E extends ChangeType>(
     event: E,
     listener: (itemChange: ItemType<E, Item>) => void | PromiseLike<void>
@@ -238,7 +240,7 @@ export class ListWatch<Item = unknown> {
     return this.#generate(event);
   }
 
-  once<E extends ChangeType>(event: E): Promise<ItemType<E, Item>>;
+  once<E extends ChangeType>(event: E): Promise<[ItemType<E, Item>]>;
   once<E extends ChangeType>(
     event: E,
     listener: (itemChange: ItemEvent<Item>) => void | PromiseLike<void>
@@ -260,7 +262,7 @@ export class ListWatch<Item = unknown> {
     const generator = this.#generate(event);
     try {
       const { value } = await generator.next();
-      return [value] as EventTypes<Item>[E];
+      return [value] as [ItemType<E, Item>];
     } finally {
       await generator.return();
     }
@@ -293,11 +295,11 @@ export class ListWatch<Item = unknown> {
   }
 
   async *#generate<E extends ChangeType>(type: E) {
-    const events: AsyncIterable<EventTypes<Item>[E][0]> = on(
+    const events: AsyncIterable<[ItemType<E, Item>]> = on(
       this.#emitter as unknown as NodeEventEmitter,
       type
     );
-    for await (const event of events) {
+    for await (const [event] of events) {
       try {
         // Generate event
         yield event;

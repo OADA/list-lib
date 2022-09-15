@@ -16,47 +16,34 @@
  */
 
 import { setTimeout } from 'isomorphic-timers-promises';
-import { spy } from 'sinon';
 import test from 'ava';
 
-// TODO: Fix this
-// Import { Change } from '@oada/types/oada/change/v2';
 import type { PUTRequest } from '@oada/client';
 
 import { createStub, emptyResponse } from './conn-stub.js';
 
 // eslint-disable-next-line node/no-extraneous-import
-import type { Change } from '@oada/list-lib';
-// eslint-disable-next-line node/no-extraneous-import
-import { ListWatch } from '@oada/list-lib';
+import { type Change, ChangeType, ListWatch } from '@oada/list-lib';
 
 const name = 'oada-list-lib-test';
 
 test('should resume from last rev', async (t) => {
   const conn = createStub();
   // A Change from adding an item to a list
-  // TODO: Better way to do this test without actually running oada?
   const path = '/bookmarks';
   const rev = 766;
 
   // @ts-expect-error test
   conn.get.resolves({ data: { rev } });
 
-  const options = {
+  // eslint-disable-next-line no-new
+  new ListWatch({
     path,
     name,
     conn,
     resume: true,
-    // Create spies to see which callbacks run
-    onAddItem: spy(),
-    onChangeItem: spy(),
-    onItem: spy(),
-    onRemoveItem: spy(),
-  };
+  });
 
-  // eslint-disable-next-line no-new
-  new ListWatch(options);
-  // TODO: How to do this right in ava?
   await setTimeout(5);
 
   t.is(conn.watch.firstCall?.args?.[0]?.rev, rev);
@@ -64,7 +51,6 @@ test('should resume from last rev', async (t) => {
 test('should persist rev to _meta', async (t) => {
   const conn = createStub();
   // A Change from adding an item to a list
-  // TODO: Better way to do this test without actually running oada?
   const path = '/bookmarks';
   const change: Change[] = [
     {
@@ -85,21 +71,8 @@ test('should persist rev to _meta', async (t) => {
     },
   ];
 
-  const options = {
-    path,
-    name,
-    conn,
-    resume: true,
-    persistInterval: 10,
-    // Create spies to see which callbacks run
-    onAddItem: spy(),
-    onChangeItem: spy(),
-    onItem: spy(),
-    onRemoveItem: spy(),
-  };
-
   // @ts-expect-error test
-  conn.get.resolves({ data: {} });
+  conn.get.resolves({ data: { rev: 3 } });
 
   async function* changes() {
     yield change;
@@ -111,12 +84,16 @@ test('should persist rev to _meta', async (t) => {
     changes: changes(),
   });
 
-  // eslint-disable-next-line no-new
-  new ListWatch(options);
-  // TODO: How to do this right in ava?
-  await setTimeout(5);
+  const watch = new ListWatch({
+    path,
+    name,
+    conn,
+    resume: true,
+    persistInterval: 10,
+  });
 
-  await setTimeout(500);
+  await watch.once(ChangeType.ItemAdded);
+  await setTimeout(100);
 
   t.assert(
     conn.put.calledWithMatch({

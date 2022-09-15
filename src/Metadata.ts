@@ -95,6 +95,7 @@ export class Metadata {
     conn,
     path,
     name,
+    persistInterval,
   }: {
     /**
      * The path to the resource with which to associate this metadata
@@ -102,13 +103,14 @@ export class Metadata {
     path: string;
     name: string;
     conn: Conn;
+    persistInterval: number;
   }) {
     this.#conn = conn;
     this.#path = join(path, '_meta', Metadata.META_KEY, name);
     this.#controller = new AbortController();
 
     // ??? Use timeouts for all updates?
-    const revUpdateInterval = setInterval(100, undefined, {
+    const revUpdateInterval = setInterval(persistInterval, undefined, {
       signal: this.#controller.signal,
     });
     const updateRevs = async () => {
