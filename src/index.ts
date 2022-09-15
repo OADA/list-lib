@@ -171,9 +171,9 @@ function buildChangeObject(rootChange: Change, ...children: Change[]) {
       change.type === 'delete'
         ? translateDelete(change.body as Json)
         : change.body;
-    const merged = objectAssignDeep(old ?? {}, body, {
-      [changeSym]: [...changes, change],
-    });
+    const merged = objectAssignDeep(old ?? {}, body);
+    // eslint-disable-next-line security/detect-object-injection
+    merged[changeSym] = [...changes, change];
     ptr.set(changeBody, merged, true);
   }
 
