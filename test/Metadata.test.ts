@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import { inspect } from 'node:util';
+
 import { setTimeout } from 'isomorphic-timers-promises';
 import test from 'ava';
 
@@ -48,6 +50,7 @@ test('should resume from last rev', async (t) => {
 
   t.is(conn.watch.firstCall?.args?.[0]?.rev, rev);
 });
+
 test('should persist rev to _meta', async (t) => {
   const conn = createStub();
   // A Change from adding an item to a list
@@ -93,12 +96,13 @@ test('should persist rev to _meta', async (t) => {
   });
 
   await watch.once(ChangeType.ItemAdded);
-  await setTimeout(100);
+  await setTimeout(500);
 
   t.assert(
     conn.put.calledWithMatch({
       path: `${path}/_meta/oada-list-lib/${name}`,
       data: { rev: 4 },
-    } as PUTRequest)
+    } as PUTRequest),
+    `conn.put calls: ${inspect(conn.put.getCalls(), false, null, true)}`
   );
 });
