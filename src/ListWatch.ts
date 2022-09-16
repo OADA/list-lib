@@ -16,7 +16,6 @@
  */
 
 import type { EventEmitter as NodeEventEmitter } from 'node:events';
-import { join } from 'node:path';
 import { on } from 'node:events';
 
 import EventEmitter from 'eventemitter3';
@@ -41,6 +40,7 @@ import {
   assertNever,
   buildChangeObject,
   changeSym,
+  join,
 } from './util.js';
 import type { Options, OptionsDeprecated } from './Options.js';
 import { Metadata } from './Metadata.js';

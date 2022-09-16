@@ -16,7 +16,6 @@
  */
 
 import { inspect } from 'node:util';
-import { join } from 'node:path';
 
 import { AbortController } from 'abort-controller';
 import { setInterval } from 'isomorphic-timers-promises';
@@ -25,9 +24,9 @@ import debug from 'debug';
 
 import type { Json } from '@oada/client';
 
+import { assertNever, join } from './util.js';
 import { AssumeState } from './index.js';
 import type { Conn } from './Options.js';
-import { assertNever } from './util.js';
 
 const log = {
   trace: debug('@oada/list-lib#metadata:trace'),

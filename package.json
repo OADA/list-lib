@@ -4,6 +4,9 @@
   "description": "Library for processing items in an OADA list",
   "main": "dist/index.js",
   "type": "module",
+  "engines": {
+    "node": ">=14.0.0"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/OADA/list-lib.git"

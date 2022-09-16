@@ -15,6 +15,9 @@
  * limitations under the License.
  */
 
+import path from 'node:path';
+import { platform } from 'node:process';
+
 import { JsonPointer } from 'json-ptr';
 import objectAssignDeep from 'object-assign-deep';
 
@@ -115,3 +118,16 @@ export function buildChangeObject(rootChange: Change, ...children: Change[]) {
 
   return changeBody;
 }
+
+/**
+ * Join URL segments
+ * ! Needed because `path.join` will not work on Windows !
+ */
+function win32join(...paths: readonly string[]): string {
+  return path.join(...paths).replace(/\\/g, '/');
+}
+
+/**
+ * @internal
+ */
+export const join = platform === 'win32' ? win32join : path.join;
