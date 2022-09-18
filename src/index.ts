@@ -65,9 +65,9 @@ export const enum ChangeType {
 
 export interface EventTypes<Item> {
   [ChangeType.ItemChanged]: [ItemChange<Item>];
-  [ChangeType.ItemAdded]: [ItemEvent<Item>];
-  [ChangeType.ItemRemoved]: [ItemEvent<Item>];
-  [ChangeType.ItemAny]: [ItemEvent<Item>];
+  [ChangeType.ItemAdded]: [ItemEvent<Item> & { item: Item }];
+  [ChangeType.ItemRemoved]: [Omit<ItemEvent<Item>, 'item'>];
+  [ChangeType.ItemAny]: [ItemEvent<Item> | ItemChange<Item>];
   error: unknown[];
 }
 

@@ -176,7 +176,7 @@ export class ListWatch<Item = unknown> {
   /**
    * Emit our internal events
    */
-  async #emit<E extends ChangeType>(event: E, itemEvent: ItemType<E, Item>) {
+  async #emit<E extends ChangeType>(event: E, itemEvent: ItemEvent<Item>) {
     switch (event) {
       case ChangeType.ItemChanged: {
         log.debug({ itemChange: itemEvent }, 'Detected change to item');
@@ -201,9 +201,9 @@ export class ListWatch<Item = unknown> {
       case ChangeType.ItemAdded: {
         const assertItem: TypeAssert<Item> = this.#assertItem;
         log.debug({ itemChange: itemEvent }, 'Detected new item');
-        const { item } = itemEvent;
+        const { item } = itemEvent as { item?: unknown };
         assertItem(item);
-        this.#emitter.emit(ChangeType.ItemAdded, itemEvent);
+        this.#emitter.emit(ChangeType.ItemAdded, { ...itemEvent, item });
 
         this.#emitter.emit(ChangeType.ItemAny, itemEvent);
 
@@ -383,7 +383,7 @@ export class ListWatch<Item = unknown> {
     for await (const { value, pointer } of items) {
       if (value === undefined) {
         // Item was removed from list
-        const itemChange: ItemEvent<Item> = {
+        const itemChange = {
           listRev,
           pointer,
         };
@@ -394,7 +394,7 @@ export class ListWatch<Item = unknown> {
       const { [changeSym]: changes } = value;
       if (!changes && '_id' in value) {
         // Item was added to list?
-        const itemChange: ItemEvent<Item> = {
+        const itemChange = {
           listRev,
           pointer,
         };
