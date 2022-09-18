@@ -27,18 +27,3 @@ jobs:
     with:
       oada: false
       publish: true
-  docker:
-    name: Docker CI
-    # Wait for yarn tests to pass?
-    needs:
-      - yarn
-    uses: qlever-llc/workflows/.github/workflows/build-and-push-service.yml@master
-    secrets:
-      dockerhub_username: ${{ secrets.DOCKERHUB_USERNAME }}
-      dockerhub_repo: ${{ secrets.DOCKER_REPO }}
-      snyk_org: ${{ secrets.SNYK_ORG }}
-      # Actual secrets
-      dockerhub_token: ${{ secrets.DOCKERHUB_TOKEN }}
-      snyk_token: ${{ secrets.SNYK_TOKEN }}
-      cosign_key: ${{ secrets.COSIGN_KEY }}
-      cosign_password: ${{ secrets.COSIGN_PASSWORD }}
