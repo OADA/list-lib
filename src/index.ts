@@ -36,9 +36,9 @@ export type List = Resource & { [key: string]: Link | List };
 export interface ItemEvent<Item = never> {
   listRev: number;
   pointer: string;
-  item?: Item;
+  readonly item: Promise<Item>;
 }
-export interface ItemChange<Item = never> extends ItemEvent<Item> {
+export interface ItemChange<Item> extends ItemEvent<Item> {
   rev: number;
   change: Change;
 }
@@ -65,8 +65,8 @@ export const enum ChangeType {
 
 export interface EventTypes<Item> {
   [ChangeType.ItemChanged]: [ItemChange<Item>];
-  [ChangeType.ItemAdded]: [ItemEvent<Item> & { item: Item }];
-  [ChangeType.ItemRemoved]: [Omit<ItemEvent<Item>, 'item'>];
+  [ChangeType.ItemAdded]: [ItemEvent<Item>];
+  [ChangeType.ItemRemoved]: [ItemEvent<Item>];
   [ChangeType.ItemAny]: [ItemEvent<Item> | ItemChange<Item>];
   error: unknown[];
 }

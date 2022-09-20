@@ -29,7 +29,6 @@ import {
   AssumeState,
   ChangeType,
   type EventTypes,
-  type ItemChange,
   type ItemEvent,
   type ItemType,
   type TypeAssert,
@@ -128,7 +127,7 @@ export class ListWatch<Item = unknown> {
       this.#emitter.on(
         ChangeType.ItemAdded,
         this.#wrapListener(ChangeType.ItemAdded, async ({ item, pointer }) =>
-          onAddItem(item!, pointer)
+          onAddItem(await item, pointer)
         )
       );
     }
@@ -147,7 +146,7 @@ export class ListWatch<Item = unknown> {
       this.#emitter.on(
         ChangeType.ItemAny,
         this.#wrapListener(ChangeType.ItemAny, async ({ item, pointer }) =>
-          onItem(item!, pointer)
+          onItem(await item, pointer)
         )
       );
     }
@@ -174,45 +173,61 @@ export class ListWatch<Item = unknown> {
   }
 
   /**
+   * Fetch the contents of the corresponding list item
+   */
+  async #getItem(itemEvent: ItemEvent<Item>): Promise<Item> {
+    // Needed because TS is weird about asserts...
+    const assertItem: TypeAssert<Item> = this.#assertItem;
+    const { data: item } = await this.#conn.get({
+      path: join(this.path, itemEvent.pointer),
+    });
+    assertItem(item);
+    return item;
+  }
+
+  /**
    * Emit our internal events
    */
-  async #emit<E extends ChangeType>(event: E, itemEvent: ItemEvent<Item>) {
+  async #emit<E extends ChangeType>(
+    event: E,
+    itemEvent: Omit<ItemEvent<Item>, 'item'>
+  ) {
+    // Automagically get the list item when it is accessed
+    const getItem = this.#getItem.bind(this);
+    let itemP: Promise<Item>;
+    const out = {
+      ...itemEvent,
+      get item() {
+        if (itemP === undefined) {
+          itemP = getItem(this);
+        }
+
+        return itemP;
+      },
+    };
     switch (event) {
       case ChangeType.ItemChanged: {
         log.debug({ itemChange: itemEvent }, 'Detected change to item');
         this.#emitter.emit(
           ChangeType.ItemChanged,
-          itemEvent as ItemType<ChangeType.ItemChanged, Item>
+          out as ItemType<ChangeType.ItemChanged, Item>
         );
-
-        if (this.#emitter.listenerCount(ChangeType.ItemAny) > 0) {
-          // Needed because TS is weird about asserts...
-          const assertItem: TypeAssert<Item> = this.#assertItem;
-          const { data: item } = await this.#conn.get({
-            path: join(this.path, itemEvent.pointer),
-          });
-          assertItem(item);
-          this.#emitter.emit(ChangeType.ItemAny, itemEvent);
-        }
+        this.#emitter.emit(ChangeType.ItemAny, out);
 
         break;
       }
 
       case ChangeType.ItemAdded: {
-        const assertItem: TypeAssert<Item> = this.#assertItem;
         log.debug({ itemChange: itemEvent }, 'Detected new item');
-        const { item } = itemEvent as { item?: unknown };
-        assertItem(item);
-        this.#emitter.emit(ChangeType.ItemAdded, { ...itemEvent, item });
-
-        this.#emitter.emit(ChangeType.ItemAny, itemEvent);
+        this.#emitter.emit(ChangeType.ItemAdded, out);
+        this.#emitter.emit(ChangeType.ItemAny, out);
 
         break;
       }
 
       case ChangeType.ItemRemoved:
         log.debug({ itemChange: itemEvent }, 'Detected removed item');
-        this.#emitter.emit(ChangeType.ItemRemoved, itemEvent);
+        this.#emitter.emit(ChangeType.ItemRemoved, out);
         break;
 
       case ChangeType.ItemAny:
@@ -411,7 +426,7 @@ export class ListWatch<Item = unknown> {
 
         // ???: Find any children of change
         // const changes = [change];
-        const itemChange: ItemChange = {
+        const itemChange = {
           rev,
           listRev,
           pointer,
