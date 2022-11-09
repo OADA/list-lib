@@ -60,8 +60,10 @@ export interface Options<Item> {
    * True: "resume" change feed for list from last processed rev
    * false: just start from current state of the list
    *
-   * @todo should default be true instead??
-   * @default false
+   * This disables storage of any state in `_meta`,
+   * thus starting from the current state of the list each time.
+   *
+   * @default true
    */
   resume?: boolean;
   /**

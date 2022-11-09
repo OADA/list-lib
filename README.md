@@ -1,4 +1,9 @@
-# OADA/list-lib
+# @oada/list-lib
+
+[![npm](https://img.shields.io/npm/v/@oada/list-lib)](https://www.npmjs.com/package/@oada/list-lib)
+[![Downloads/week](https://img.shields.io/npm/dw/@oada/list-lib.svg)](https://npmjs.org/package/@oada/list-lib)
+[![code style: prettier](https://img.shields.io/badge/code_style-prettier-ff69b4.svg)](https://github.com/prettier/prettier)
+[![License](https://img.shields.io/github/license/OADA/client)](LICENSE)
 
 A library for handling lists of items in OADA for TypeScript and JavaScript.
 The library takes callbacks for events like
@@ -11,21 +16,23 @@ For detailed options, see the `Options` type in src/Options.ts
 ## Basic Usage Example
 
 ```typescript
-import { ListWatch } from '@oada/list-lib'
+import { ChangeType, ListWatch } from '@oada/list-lib'
 
 // See type definitions for all supported options
 const watch = new ListWatch({
     path: '/bookmarks/foo/list',
-    name: 'bob',
     conn: /* an @oada/client instance */,
-    resume: true,
-
-    onAddItem(item, id) { console.log(`New list item ${id}: %O`, item) },
-    onRemoveItem(id) { console.log(`Item ${id} removed`) },
 })
 
-// The watch can be stopped after creation
-await watch.stop()
+// Uses async generators
+const itemsGenerator = await watch.on(ChangeType.ItemAdded);
+for await (const item of itemsGenerator) {
+    console.log(item, 'New item added');
+}
+
+// Can use callbacks instead
+watch.on(ChangeType.ItemAdded, ({ item, id }) => { console.log(item, 'New list item') });
+watch.on(ChangeType.ItemRemoved, ({ id }) => { console.log(item, 'Item removed') },
 ```
 
 ## Item types

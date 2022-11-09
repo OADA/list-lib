@@ -104,7 +104,7 @@ export class ListWatch<Item = unknown> {
     path,
     itemsPath = '$.*',
     name = process.env.npm_package_name!,
-    resume = false,
+    resume = true,
     conn,
     persistInterval = 1000,
     // If no assert given, assume all items valid
