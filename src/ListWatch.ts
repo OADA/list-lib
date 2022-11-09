@@ -225,16 +225,19 @@ export class ListWatch<Item = unknown> {
         break;
       }
 
-      case ChangeType.ItemRemoved:
+      case ChangeType.ItemRemoved: {
         log.debug({ itemChange: itemEvent }, 'Detected removed item');
         this.#emitter.emit(ChangeType.ItemRemoved, out);
         break;
+      }
 
-      case ChangeType.ItemAny:
+      case ChangeType.ItemAny: {
         throw new TypeError('ItemAny is not a valid event');
+      }
 
-      default:
+      default: {
         assertNever(event, `Unknown event type ${event}`);
+      }
     }
   }
 

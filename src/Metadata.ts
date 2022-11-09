@@ -219,16 +219,19 @@ export class Metadata {
 
       let rev: number;
       switch (assume) {
-        case AssumeState.Handled:
+        case AssumeState.Handled: {
           rev = Number(revHeader ?? 0);
           break;
+        }
 
-        case AssumeState.New:
+        case AssumeState.New: {
           rev = 0;
           break;
+        }
 
-        default:
+        default: {
           assertNever(assume);
+        }
       }
 
       this.#rev = rev!;
