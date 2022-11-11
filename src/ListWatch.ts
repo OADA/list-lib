@@ -123,7 +123,7 @@ export class ListWatch<Item = unknown> {
   }: Options<Item> & OptionsDeprecated<Item>) {
     this.path = path;
     this.tree = tree;
-    this.itemsPath = JSONPath.toPathArray(itemsPath);
+    this.itemsPath = itemsPath;
     this.name = name;
     this.#conn = conn;
     this.#assertItem = assertItem;
