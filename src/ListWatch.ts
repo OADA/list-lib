@@ -78,6 +78,10 @@ export class ListWatch<Item = unknown> {
    */
   readonly path;
   /**
+   * The OADA tree of the List being watched
+   */
+  readonly tree;
+  /**
    * The JSON Path for the list items
    */
   readonly itemsPath;
@@ -103,6 +107,7 @@ export class ListWatch<Item = unknown> {
   constructor({
     path,
     itemsPath = '$.*',
+    tree = { '*': { _type: 'application/json' } },
     name = process.env.npm_package_name!,
     resume = true,
     conn,
@@ -117,7 +122,8 @@ export class ListWatch<Item = unknown> {
     onNewList,
   }: Options<Item> & OptionsDeprecated<Item>) {
     this.path = path;
-    this.itemsPath = itemsPath;
+    this.tree = tree;
+    this.itemsPath = JSONPath.toPathArray(itemsPath);
     this.name = name;
     this.#conn = conn;
     this.#assertItem = assertItem;
@@ -196,7 +202,6 @@ export class ListWatch<Item = unknown> {
     const getItem = this.#getItem.bind(this);
     let itemP: Promise<Item>;
     const out = {
-      ...itemEvent,
       get item() {
         if (itemP === undefined) {
           itemP = getItem(this);
@@ -204,6 +209,7 @@ export class ListWatch<Item = unknown> {
 
         return itemP;
       },
+      ...itemEvent,
     };
     switch (event) {
       case ChangeType.ItemChanged: {
@@ -367,12 +373,15 @@ export class ListWatch<Item = unknown> {
       }
     }
 
-    // Setup watch on the path
     if (this.#meta) {
       await this.#meta.init(assume);
       log.debug('Resuming watch from rev %s', this.#meta.rev);
+    } else {
+      log.debug('Starting with resume=false');
+      await this.#handleStartingItems();
     }
 
+    // Setup watch on the path
     // eslint-disable-next-line security/detect-non-literal-fs-filename
     const { changes } = await conn.watch({
       path,
@@ -386,6 +395,40 @@ export class ListWatch<Item = unknown> {
       this.#emitter.emit('error', error)
     );
     return changes;
+  }
+
+  /**
+   * Treat all starting list items as new
+   *
+   * @todo Remove need for tree GET
+   */
+  async #handleStartingItems() {
+    const { path, tree, itemsPath } = this;
+    const { data: json } = await this.#conn.get({ path, tree });
+    if (
+      typeof json !== 'object' ||
+      json === null ||
+      Array.isArray(json) ||
+      Buffer.isBuffer(json)
+    ) {
+      throw new TypeError('Expected JSON');
+    }
+
+    // eslint-disable-next-line new-cap
+    const items = JSONPath<Array<Result<ChangeBody<Item>>>>({
+      resultType: 'all',
+      path: itemsPath,
+      json,
+    });
+    const listRev = Number(json._rev);
+    for await (const { value, pointer } of items) {
+      const itemChange = {
+        item: value,
+        listRev,
+        pointer,
+      };
+      await this.#emit(ChangeType.ItemAdded, itemChange);
+    }
   }
 
   /**

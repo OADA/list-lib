@@ -16,6 +16,7 @@
  */
 
 import type { OADAClient } from '@oada/client';
+import type Tree from '@oada/types/oada/tree/v1.js';
 
 import type {
   AssumeState,
@@ -50,6 +51,11 @@ export interface Options<Item> {
    * @default '$.*'
    */
   itemsPath?: string;
+  /**
+   * Only needed when using `itemsPath` and `resume: false`
+   * @todo remove need for this entirely
+   */
+  tree?: Tree;
   /**
    * A persistent name/id for this instance (can just be random string)
    *
