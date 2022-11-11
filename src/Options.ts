@@ -48,7 +48,7 @@ export interface Options<Item> {
   /**
    * JSON Path to retrieve items from list.
    *
-   * @default '$.*'
+   * @default '$[?(!@property.match(/^_/))]'
    */
   itemsPath?: string;
   /**

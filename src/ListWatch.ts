@@ -106,7 +106,7 @@ export class ListWatch<Item = unknown> {
   constructor(options: Options<Item> & OptionsDeprecated<Item>);
   constructor({
     path,
-    itemsPath = '$.*',
+    itemsPath = '$[?(!@property.match(/^_/))]',
     tree = { '*': { _type: 'application/json' } },
     name = process.env.npm_package_name!,
     resume = true,
