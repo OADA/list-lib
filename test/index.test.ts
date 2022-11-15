@@ -81,7 +81,6 @@ test('it should detect new item', async (t) => {
 
   async function* changes() {
     yield change;
-    yield change;
   }
 
   // @ts-expect-error bs from deprecated v2 API
@@ -136,7 +135,6 @@ test('it should detect removed item', async (t) => {
   const onRemoveItem = spy();
 
   async function* changes() {
-    yield change;
     yield change;
   }
 
@@ -211,7 +209,6 @@ test('it should detect modified item', async (t) => {
   const onRemoveItem = spy();
 
   async function* changes() {
-    yield change;
     yield change;
   }
 

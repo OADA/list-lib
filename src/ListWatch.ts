@@ -130,6 +130,7 @@ export class ListWatch<Item = unknown> {
     this.#emitter = new EventEmitter<EventTypes<Item>, this>();
 
     if (onAddItem) {
+      log.warn('onAddItem is deprecated, use .on(ChangeType.ItemAdded, ...)');
       this.#emitter.on(
         ChangeType.ItemAdded,
         this.#wrapListener(ChangeType.ItemAdded, async ({ item, pointer }) =>
@@ -139,6 +140,9 @@ export class ListWatch<Item = unknown> {
     }
 
     if (onChangeItem) {
+      log.warn(
+        'onChangeItem is deprecated, use .on(ChangeType.ItemChanged, ...)'
+      );
       this.#emitter.on(
         ChangeType.ItemChanged,
         this.#wrapListener(
@@ -149,6 +153,7 @@ export class ListWatch<Item = unknown> {
     }
 
     if (onItem) {
+      log.warn('onItem is deprecated, use .on(ChangeType.ItemAny, ...)');
       this.#emitter.on(
         ChangeType.ItemAny,
         this.#wrapListener(ChangeType.ItemAny, async ({ item, pointer }) =>
@@ -158,6 +163,9 @@ export class ListWatch<Item = unknown> {
     }
 
     if (onRemoveItem) {
+      log.warn(
+        'onRemoveItem is deprecated, use .on(ChangeType.ItemRemoved, ...)'
+      );
       this.#emitter.on(
         ChangeType.ItemRemoved,
         this.#wrapListener(ChangeType.ItemRemoved, async ({ pointer }) =>
@@ -358,7 +366,7 @@ export class ListWatch<Item = unknown> {
     const { path } = this;
     const conn = this.#conn;
 
-    log.info('Ensuring %s exists', path);
+    log.debug('Ensuring %s exists', path);
     try {
       await conn.head({ path });
     } catch (error: unknown) {
@@ -394,6 +402,8 @@ export class ListWatch<Item = unknown> {
       // Forward rejections to EventEmitter
       this.#emitter.emit('error', error)
     );
+
+    log.info({ this: this }, 'ListWatch initialized');
     return changes;
   }
 
