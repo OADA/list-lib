@@ -36,7 +36,18 @@ test('should resume from last rev', async (t) => {
   const rev = 766;
 
   // @ts-expect-error test
-  conn.get.resolves({ data: { rev } });
+  conn.get.resolves({
+    data: {
+      _id: 'resources/foo',
+      _rev: 7,
+      _type: 'application/vnd.oada.foo.1+json',
+      _meta: {
+        _id: 'resources/foo/_meta',
+        _rev: 7,
+      },
+      rev,
+    },
+  });
 
   // eslint-disable-next-line no-new
   new ListWatch({

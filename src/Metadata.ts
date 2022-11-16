@@ -22,6 +22,7 @@ import { setInterval } from 'isomorphic-timers-promises';
 
 import debug from 'debug';
 
+import { assert as assertResource } from '@oada/types/oada/resource.js';
 import type { Json } from '@oada/client';
 
 import { assertNever, join } from './util.js';
@@ -126,7 +127,7 @@ export class Metadata {
   }
 
   async #doUpdate() {
-    if (!this.#initialized || !this.#revDirty) {
+    if (!(this.#initialized && this.#revDirty)) {
       return;
     }
 
@@ -189,16 +190,9 @@ export class Metadata {
       const { data } = await this.#conn.get({
         path: this.#path,
       });
-      if (
-        typeof data == 'object' &&
-        data &&
-        !Buffer.isBuffer(data) &&
-        !Array.isArray(data)
-      ) {
-        this.#rev = Number(data.rev ?? 0);
-      }
+      assertResource(data);
+      this.#rev = Number(data.rev ?? 0);
 
-      this.#initialized = true;
       return true;
     } catch {
       // Create our metadata?
@@ -241,8 +235,9 @@ export class Metadata {
           rev: rev!,
         },
       });
-      this.#initialized = true;
       return false;
+    } finally {
+      this.#initialized = true;
     }
   }
 }
