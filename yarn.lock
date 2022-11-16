@@ -230,9 +230,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@oada/client@npm:^4.4.1":
-  version: 4.4.1
-  resolution: "@oada/client@npm:4.4.1"
+"@oada/client@npm:^4.5.0":
+  version: 4.5.0
+  resolution: "@oada/client@npm:4.5.0"
   dependencies:
     "@oada/types": ^3.3.0
     abort-controller: ^3.0.0
@@ -257,7 +257,7 @@ __metadata:
     utf-8-validate: ^5.0.9
     ws: ^8.9.0
     xksuid: ^0.0.3
-  checksum: 4c40612498904ea74f6cd274a4e46319ba3caeffc72f230ddb1c2f6f2ce3c8e0dac24e226099578c967ec622b1435e4c0dae7bf4f91bcb56644f2dbb15ba9197
+  checksum: d0f13e4058dbd2b6a5117774d7aafbb5b23d0f595de4bbbfd132b444131f8bf42bc56c2d0321d5a02da6b134e4fd5a41a1b137e9ca6379a30610f4cdc8252b00
   languageName: node
   linkType: hard
 
@@ -266,7 +266,7 @@ __metadata:
   resolution: "@oada/list-lib@workspace:."
   dependencies:
     "@ava/typescript": ^3.0.1
-    "@oada/client": ^4.4.1
+    "@oada/client": ^4.5.0
     "@oada/types": ^3.3.0
     "@tsconfig/node14": ^1.0.3
     "@types/debug": ^4.1.7
