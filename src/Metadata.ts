@@ -183,7 +183,7 @@ export class Metadata {
    * @returns whether existing metadata was found
    * @TODO I hate needing to call init...
    */
-  async init() {
+  async init(): Promise<boolean> {
     // Try to get our metadata about this list
     try {
       const { data } = await this.#conn.get({
@@ -191,6 +191,7 @@ export class Metadata {
       });
       assertResource(data);
       this.#rev = Number(data.rev ?? 0);
+      return true;
     } catch {
       // Create our metadata?
       log.info('%s does not exist, posting new resource', this.#path);
@@ -217,9 +218,9 @@ export class Metadata {
           rev: rev!,
         },
       });
+      return false;
     } finally {
       this.#initialized = true;
-      return this.#rev;
     }
   }
 }

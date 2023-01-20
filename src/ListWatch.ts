@@ -381,10 +381,10 @@ export class ListWatch<Item = unknown> {
       }
     }
 
-    const rev = await this.#meta?.init();
+    const foundMeta = await this.#meta?.init();
     log.debug('Resuming watch from rev %s', this.#meta?.rev);
 
-    if (rev === undefined) {
+    if (!foundMeta) {
       switch (assume) {
         case AssumeState.Handled: {
           break;
