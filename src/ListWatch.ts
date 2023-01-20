@@ -18,7 +18,7 @@
 import type { EventEmitter as NodeEventEmitter } from 'node:events';
 import { on } from 'node:events';
 
-import EventEmitter from 'eventemitter3';
+import { EventEmitter } from 'eventemitter3';
 import { JSONPath } from 'jsonpath-plus';
 import debug from 'debug';
 
@@ -381,12 +381,24 @@ export class ListWatch<Item = unknown> {
       }
     }
 
-    if (this.#meta) {
-      await this.#meta.init(assume);
-      log.debug('Resuming watch from rev %s', this.#meta.rev);
-    } else {
-      log.debug('Starting with resume=false');
-      await this.#handleStartingItems();
+    const rev = await this.#meta?.init();
+    log.debug('Resuming watch from rev %s', this.#meta?.rev);
+
+    if (rev === undefined) {
+      switch (assume) {
+        case AssumeState.Handled: {
+          break;
+        }
+
+        case AssumeState.New: {
+          await this.#handleStartingItems();
+          break;
+        }
+
+        default: {
+          assertNever(assume);
+        }
+      }
     }
 
     // Setup watch on the path

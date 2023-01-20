@@ -22,11 +22,10 @@ import { setInterval } from 'isomorphic-timers-promises';
 
 import debug from 'debug';
 
-import { assert as assertResource } from '@oada/types/oada/resource.js';
 import type { Json } from '@oada/client';
+import { assert as assertResource } from '@oada/types/oada/resource.js';
 
-import { assertNever, join } from './util.js';
-import { AssumeState } from './index.js';
+import { join } from './util.js';
 import type { Conn } from './Options.js';
 
 const log = {
@@ -81,7 +80,7 @@ export class Metadata {
   /**
    * The rev we left off on
    */
-  #rev = 0;
+  #rev?: number;
   #revDirty = false;
 
   // Where to store state
@@ -145,7 +144,7 @@ export class Metadata {
     }
   }
 
-  get rev(): number {
+  get rev() {
     return this.#rev;
   }
 
@@ -184,7 +183,7 @@ export class Metadata {
    * @returns whether existing metadata was found
    * @TODO I hate needing to call init...
    */
-  async init(assume: AssumeState): Promise<boolean> {
+  async init() {
     // Try to get our metadata about this list
     try {
       const { data } = await this.#conn.get({
@@ -192,8 +191,6 @@ export class Metadata {
       });
       assertResource(data);
       this.#rev = Number(data.rev ?? 0);
-
-      return true;
     } catch {
       // Create our metadata?
       log.info('%s does not exist, posting new resource', this.#path);
@@ -211,33 +208,18 @@ export class Metadata {
         data: { _id: location?.slice(1) },
       });
 
-      let rev: number;
-      switch (assume) {
-        case AssumeState.Handled: {
-          rev = Number(revHeader ?? 0);
-          break;
-        }
+      const rev = revHeader ? Number(revHeader) : undefined;
 
-        case AssumeState.New: {
-          rev = 0;
-          break;
-        }
-
-        default: {
-          assertNever(assume);
-        }
-      }
-
-      this.#rev = rev!;
+      this.#rev = rev;
       await this.#conn.put({
         path: this.#path,
         data: {
           rev: rev!,
         },
       });
-      return false;
     } finally {
       this.#initialized = true;
+      return this.#rev;
     }
   }
 }
