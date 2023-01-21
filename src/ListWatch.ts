@@ -187,6 +187,53 @@ export class ListWatch<Item = unknown> {
   }
 
   /**
+   * Clean up metadata and unwatch list
+   */
+  async stop() {
+    try {
+      const watch = await this.#watch;
+      await watch.return?.();
+    } finally {
+      await this.#meta?.stop();
+    }
+  }
+
+  on<E extends ChangeType>(event: E): AsyncGenerator<[ItemType<E, Item>]>;
+  on<E extends ChangeType>(
+    event: E,
+    listener: (itemChange: ItemType<E, Item>) => void | PromiseLike<void>
+  ): this;
+  on<E extends ChangeType>(
+    event: E,
+    listener?: (itemChange: ItemType<E, Item>) => void | PromiseLike<void>
+  ) {
+    if (listener) {
+      this.#emitter.on(event, this.#wrapListener(event, listener));
+      return this;
+    }
+
+    return this.#generate(event);
+  }
+
+  once<E extends ChangeType>(event: E): Promise<[ItemType<E, Item>]>;
+  once<E extends ChangeType>(
+    event: E,
+    listener: (itemChange: ItemEvent<Item>) => void | PromiseLike<void>
+  ): this;
+  // eslint-disable-next-line @typescript-eslint/promise-function-async
+  once<E extends ChangeType>(
+    event: E,
+    listener?: (itemChange: ItemEvent<Item>) => void | PromiseLike<void>
+  ) {
+    if (listener) {
+      this.#emitter.once(event, this.#wrapListener(event, listener));
+      return this;
+    }
+
+    return this.#once(event);
+  }
+
+  /**
    * Fetch the contents of the corresponding list item
    */
   async #getItem(itemEvent: ItemEvent<Item>): Promise<Item> {
@@ -255,41 +302,6 @@ export class ListWatch<Item = unknown> {
     }
   }
 
-  on<E extends ChangeType>(event: E): AsyncGenerator<[ItemType<E, Item>]>;
-  on<E extends ChangeType>(
-    event: E,
-    listener: (itemChange: ItemType<E, Item>) => void | PromiseLike<void>
-  ): this;
-  on<E extends ChangeType>(
-    event: E,
-    listener?: (itemChange: ItemType<E, Item>) => void | PromiseLike<void>
-  ) {
-    if (listener) {
-      this.#emitter.on(event, this.#wrapListener(event, listener));
-      return this;
-    }
-
-    return this.#generate(event);
-  }
-
-  once<E extends ChangeType>(event: E): Promise<[ItemType<E, Item>]>;
-  once<E extends ChangeType>(
-    event: E,
-    listener: (itemChange: ItemEvent<Item>) => void | PromiseLike<void>
-  ): this;
-  // eslint-disable-next-line @typescript-eslint/promise-function-async
-  once<E extends ChangeType>(
-    event: E,
-    listener?: (itemChange: ItemEvent<Item>) => void | PromiseLike<void>
-  ) {
-    if (listener) {
-      this.#emitter.once(event, this.#wrapListener(event, listener));
-      return this;
-    }
-
-    return this.#once(event);
-  }
-
   async #once<E extends ChangeType>(event: E) {
     const generator = this.#generate(event);
     try {
@@ -348,18 +360,6 @@ export class ListWatch<Item = unknown> {
   }
 
   /**
-   * Clean up metadata and unwatch list
-   */
-  async stop() {
-    try {
-      const watch = await this.#watch;
-      await watch.return?.();
-    } finally {
-      await this.#meta?.stop();
-    }
-  }
-
-  /**
    * Do async stuff for initializing ourself since constructors are synchronous
    */
   async #initialize(assume: AssumeState = AssumeState.New) {
@@ -402,7 +402,6 @@ export class ListWatch<Item = unknown> {
     }
 
     // Setup watch on the path
-    // eslint-disable-next-line security/detect-non-literal-fs-filename
     const { changes } = await conn.watch({
       path,
       rev: this.#meta?.rev,

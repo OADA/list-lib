@@ -25,8 +25,8 @@ import debug from 'debug';
 import type { Json } from '@oada/client';
 import { assert as assertResource } from '@oada/types/oada/resource.js';
 
-import { join } from './util.js';
 import type { Conn } from './Options.js';
+import { join } from './util.js';
 
 const log = {
   trace: debug('@oada/list-lib#metadata:trace'),
@@ -125,40 +125,6 @@ export class Metadata {
     this.#updates = updateRevs();
   }
 
-  async #doUpdate() {
-    if (!(this.#initialized && this.#revDirty)) {
-      return;
-    }
-
-    log.trace('Recording rev %s', this.#rev);
-    const data: Json = { rev: this.#rev };
-    this.#revDirty = false;
-    try {
-      await this.#conn.put({
-        path: this.#path,
-        data,
-      });
-    } catch (error: unknown) {
-      log.error({ error }, 'Failed to update rev');
-      this.#revDirty = true;
-    }
-  }
-
-  get rev() {
-    return this.#rev;
-  }
-
-  set rev(rev) {
-    if (this.#rev === rev) {
-      // No need to update
-      return;
-    }
-
-    log.trace('Updating local rev to %d', rev);
-    this.#rev = rev;
-    this.#revDirty = true;
-  }
-
   async stop() {
     this.#controller.abort();
     await this.#updates;
@@ -222,5 +188,39 @@ export class Metadata {
     } finally {
       this.#initialized = true;
     }
+  }
+
+  async #doUpdate() {
+    if (!(this.#initialized && this.#revDirty)) {
+      return;
+    }
+
+    log.trace('Recording rev %s', this.#rev);
+    const data: Json = { rev: this.#rev };
+    this.#revDirty = false;
+    try {
+      await this.#conn.put({
+        path: this.#path,
+        data,
+      });
+    } catch (error: unknown) {
+      log.error({ error }, 'Failed to update rev');
+      this.#revDirty = true;
+    }
+  }
+
+  get rev() {
+    return this.#rev;
+  }
+
+  set rev(rev) {
+    if (this.#rev === rev) {
+      // No need to update
+      return;
+    }
+
+    log.trace('Updating local rev to %d', rev);
+    this.#rev = rev;
+    this.#revDirty = true;
   }
 }
