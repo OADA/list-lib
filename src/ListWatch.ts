@@ -384,6 +384,13 @@ export class ListWatch<Item = unknown> {
     const foundMeta = await this.#meta?.init();
     log.debug('Resuming watch from rev %s', this.#meta?.rev);
 
+    // Setup watch on the path
+    const { changes } = await conn.watch({
+      path,
+      rev: this.#meta?.rev,
+      type: 'tree',
+    });
+
     if (!foundMeta) {
       switch (assume) {
         case AssumeState.Handled: {
@@ -400,13 +407,6 @@ export class ListWatch<Item = unknown> {
         }
       }
     }
-
-    // Setup watch on the path
-    const { changes } = await conn.watch({
-      path,
-      rev: this.#meta?.rev,
-      type: 'tree',
-    });
 
     // eslint-disable-next-line github/no-then
     void this.#handleChangeFeed(changes).catch((error: unknown) =>
@@ -474,7 +474,7 @@ export class ListWatch<Item = unknown> {
       }
 
       const { [changeSym]: changes } = value;
-      if (!changes && '_id' in value) {
+      if (!changes && typeof value === 'object' && '_id' in value) {
         // Item was added to list?
         const itemChange = {
           listRev,
