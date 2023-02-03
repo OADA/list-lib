@@ -306,7 +306,7 @@ export class ListWatch<Item = unknown> {
     const generator = this.#generate(event);
     try {
       const { value } = await generator.next();
-      return [value] as [ItemType<E, Item>];
+      return value as [ItemType<E, Item>];
     } finally {
       await generator.return();
     }
@@ -346,7 +346,7 @@ export class ListWatch<Item = unknown> {
     for await (const [event] of events) {
       try {
         // Generate event
-        yield event;
+        yield [event];
       } catch (error: unknown) {
         log.error({ type, error }, 'Error in generator');
         await this.#meta?.setErrored(event.pointer, event.listRev, error);
