@@ -106,7 +106,7 @@
     "typescript": "4.9.3"
   },
   "dependencies": {
-    "@oada/types": "^3.3.0",
+    "@oada/types": "^3.5.2",
     "abort-controller": "^3.0.0",
     "debug": "^4.3.4",
     "eventemitter3": "^5.0.0",
