@@ -21,10 +21,8 @@ import test from 'ava';
 
 import { createStub, emptyResponse } from './conn-stub.js';
 
-// eslint-disable-next-line node/no-extraneous-import
-import type { Change } from '@oada/list-lib';
-// eslint-disable-next-line node/no-extraneous-import
 import { ChangeType, ListWatch } from '@oada/list-lib';
+import type { Change } from '@oada/list-lib';
 
 const name = 'oada-list-lib-test';
 
@@ -116,6 +114,7 @@ test('it should detect removed item', async (t) => {
       resource_id: 'resources/default:resources_bookmarks_321',
       path: '',
       body: {
+        // eslint-disable-next-line unicorn/no-null
         '1e6XB0Hy7XJICbi3nMzCtl4QLpC': null,
         '_meta': {
           modifiedBy: 'users/default:users_sam_321',

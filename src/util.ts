@@ -15,9 +15,6 @@
  * limitations under the License.
  */
 
-import path from 'node:path';
-import { platform } from 'node:process';
-
 import { JsonPointer } from 'json-ptr';
 import objectAssignDeep from 'object-assign-deep';
 
@@ -86,7 +83,7 @@ export function translateDelete(body: Json): Json | undefined {
     Object.entries(body).map(([key, value]) => [
       key,
       translateDelete(value!) as Json,
-    ])
+    ]),
   );
 }
 
@@ -104,14 +101,14 @@ export function buildChangeObject(rootChange: Change, ...children: Change[]) {
   for (const change of children) {
     const ptr = JsonPointer.create(change.path);
     const old = ptr.get(changeBody) as ChangeBody<unknown>;
-    // eslint-disable-next-line security/detect-object-injection
+
     const changes = old?.[changeSym] ?? [];
     const body =
       change.type === 'delete'
         ? translateDelete(change.body as Json)
         : change.body;
     const merged = objectAssignDeep(old ?? {}, body);
-    // eslint-disable-next-line security/detect-object-injection
+
     merged[changeSym] = [...changes, change];
     ptr.set(changeBody, merged, true);
   }
@@ -120,14 +117,6 @@ export function buildChangeObject(rootChange: Change, ...children: Change[]) {
 }
 
 /**
- * Join URL segments
- * ! Needed because `path.join` will not work on Windows !
- */
-function win32join(...paths: readonly string[]): string {
-  return path.join(...paths).replace(/\\/g, '/');
-}
-
-/**
  * @internal
  */
-export const join = platform === 'win32' ? win32join : path.join;
+export { join } from 'node:path/posix';

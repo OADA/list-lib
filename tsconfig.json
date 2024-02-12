@@ -1,5 +1,5 @@
 {
-  "extends": "@tsconfig/node14",
+  "extends": "@tsconfig/node16",
   "ts-node": {
     "files": true
   },
@@ -14,7 +14,8 @@
     "importHelpers": true,
     "alwaysStrict": true,
     "strict": true,
-    "importsNotUsedAsValues": "error",
+    "verbatimModuleSyntax": true,
+    "preserveConstEnums": true,
     "noUncheckedIndexedAccess": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,

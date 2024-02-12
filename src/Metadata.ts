@@ -84,11 +84,11 @@ export class Metadata {
   #revDirty = false;
 
   // Where to store state
-  #conn;
-  #path;
+  readonly #conn;
+  readonly #path;
   #initialized = false;
-  #controller;
-  #updates;
+  readonly #controller;
+  readonly #updates;
 
   constructor({
     conn,
@@ -110,6 +110,7 @@ export class Metadata {
 
     // ??? Use timeouts for all updates?
     const revUpdateInterval = setInterval(persistInterval, undefined, {
+      // @ts-expect-error browser/node difference bs
       signal: this.#controller.signal,
     });
     const updateRevs = async () => {

@@ -26,14 +26,6 @@ import type { Change } from '@oada/client';
 import type Resource from '@oada/types/oada/resource.js';
 
 import {
-  AssumeState,
-  ChangeType,
-  type EventTypes,
-  type ItemEvent,
-  type ItemType,
-  type TypeAssert,
-} from './index.js';
-import {
   type ChangeBody,
   type Result,
   assertNever,
@@ -41,6 +33,13 @@ import {
   changeSym,
   join,
 } from './util.js';
+import {
+  ChangeType,
+  type EventTypes,
+  type ItemEvent,
+  type ItemType,
+  type TypeAssert,
+} from './index.js';
 import type { Options, OptionsDeprecated } from './Options.js';
 import { Metadata } from './Metadata.js';
 
@@ -52,6 +51,11 @@ const log = {
   error: debug('@oada/list-lib:error'),
   fatal: debug('@oada/list-lib:fatal'),
 };
+
+export enum AssumeState {
+  New,
+  Handled,
+}
 
 /**
  * The main class of this library.
@@ -90,11 +94,11 @@ export class ListWatch<Item = unknown> {
    */
   readonly name;
 
-  #conn;
-  #watch;
-  #meta;
-  #emitter;
-  #assertItem;
+  readonly #conn;
+  readonly #watch;
+  readonly #meta;
+  readonly #emitter;
+  readonly #assertItem;
 
   constructor(options: Options<Item>);
   /**
@@ -134,21 +138,21 @@ export class ListWatch<Item = unknown> {
       this.#emitter.on(
         ChangeType.ItemAdded,
         this.#wrapListener(ChangeType.ItemAdded, async ({ item, pointer }) =>
-          onAddItem(await item, pointer)
-        )
+          onAddItem(await item, pointer),
+        ),
       );
     }
 
     if (onChangeItem) {
       log.warn(
-        'onChangeItem is deprecated, use .on(ChangeType.ItemChanged, ...)'
+        'onChangeItem is deprecated, use .on(ChangeType.ItemChanged, ...)',
       );
       this.#emitter.on(
         ChangeType.ItemChanged,
         this.#wrapListener(
           ChangeType.ItemChanged,
-          async ({ change, pointer }) => onChangeItem(change, pointer)
-        )
+          async ({ change, pointer }) => onChangeItem(change, pointer),
+        ),
       );
     }
 
@@ -157,20 +161,20 @@ export class ListWatch<Item = unknown> {
       this.#emitter.on(
         ChangeType.ItemAny,
         this.#wrapListener(ChangeType.ItemAny, async ({ item, pointer }) =>
-          onItem(await item, pointer)
-        )
+          onItem(await item, pointer),
+        ),
       );
     }
 
     if (onRemoveItem) {
       log.warn(
-        'onRemoveItem is deprecated, use .on(ChangeType.ItemRemoved, ...)'
+        'onRemoveItem is deprecated, use .on(ChangeType.ItemRemoved, ...)',
       );
       this.#emitter.on(
         ChangeType.ItemRemoved,
         this.#wrapListener(ChangeType.ItemRemoved, async ({ pointer }) =>
-          onRemoveItem(pointer)
-        )
+          onRemoveItem(pointer),
+        ),
       );
     }
 
@@ -201,11 +205,11 @@ export class ListWatch<Item = unknown> {
   on<E extends ChangeType>(event: E): AsyncGenerator<[ItemType<E, Item>]>;
   on<E extends ChangeType>(
     event: E,
-    listener: (itemChange: ItemType<E, Item>) => void | PromiseLike<void>
+    listener: (itemChange: ItemType<E, Item>) => void | PromiseLike<void>,
   ): this;
   on<E extends ChangeType>(
     event: E,
-    listener?: (itemChange: ItemType<E, Item>) => void | PromiseLike<void>
+    listener?: (itemChange: ItemType<E, Item>) => void | PromiseLike<void>,
   ) {
     if (listener) {
       this.#emitter.on(event, this.#wrapListener(event, listener));
@@ -218,12 +222,12 @@ export class ListWatch<Item = unknown> {
   once<E extends ChangeType>(event: E): Promise<[ItemType<E, Item>]>;
   once<E extends ChangeType>(
     event: E,
-    listener: (itemChange: ItemEvent<Item>) => void | PromiseLike<void>
+    listener: (itemChange: ItemEvent<Item>) => void | PromiseLike<void>,
   ): this;
   // eslint-disable-next-line @typescript-eslint/promise-function-async
   once<E extends ChangeType>(
     event: E,
-    listener?: (itemChange: ItemEvent<Item>) => void | PromiseLike<void>
+    listener?: (itemChange: ItemEvent<Item>) => void | PromiseLike<void>,
   ) {
     if (listener) {
       this.#emitter.once(event, this.#wrapListener(event, listener));
@@ -251,7 +255,7 @@ export class ListWatch<Item = unknown> {
    */
   async #emit<E extends ChangeType>(
     event: E,
-    itemEvent: Omit<ItemEvent<Item>, 'item'>
+    itemEvent: Omit<ItemEvent<Item>, 'item'>,
   ) {
     // Automagically get the list item when it is accessed
     const getItem = this.#getItem.bind(this);
@@ -271,7 +275,7 @@ export class ListWatch<Item = unknown> {
         log.debug({ itemChange: itemEvent }, 'Detected change to item');
         this.#emitter.emit(
           ChangeType.ItemChanged,
-          out as ItemType<ChangeType.ItemChanged, Item>
+          out as ItemType<ChangeType.ItemChanged, Item>,
         );
         this.#emitter.emit(ChangeType.ItemAny, out);
 
@@ -314,7 +318,7 @@ export class ListWatch<Item = unknown> {
 
   #wrapListener<E extends ItemEvent<Item>>(
     type: string,
-    listener: (itemChange: E) => void | PromiseLike<void>
+    listener: (itemChange: E) => void | PromiseLike<void>,
   ) {
     return async (itemChange: E) => {
       try {
@@ -322,12 +326,12 @@ export class ListWatch<Item = unknown> {
       } catch (error: unknown) {
         log.error(
           { type, listener: listener.name, error },
-          'Error in listener'
+          'Error in listener',
         );
         await this.#meta?.setErrored(
           itemChange.pointer,
           itemChange.listRev,
-          error
+          error,
         );
       } finally {
         if (this.#meta) {
@@ -341,7 +345,7 @@ export class ListWatch<Item = unknown> {
   async *#generate<E extends ChangeType>(type: E) {
     const events: AsyncIterable<[ItemType<E, Item>]> = on(
       this.#emitter as unknown as NodeEventEmitter,
-      type
+      type,
     );
     for await (const [event] of events) {
       try {
@@ -411,7 +415,7 @@ export class ListWatch<Item = unknown> {
     // eslint-disable-next-line github/no-then
     void this.#handleChangeFeed(changes).catch((error: unknown) =>
       // Forward rejections to EventEmitter
-      this.#emitter.emit('error', error)
+      this.#emitter.emit('error', error),
     );
 
     log.info({ this: this }, 'ListWatch initialized');
@@ -488,7 +492,7 @@ export class ListWatch<Item = unknown> {
         log.trace({ change }, 'Received change');
         const rev = Number(
           // @ts-expect-error just do it
-          change.body?._meta?._rev ?? change.body?._rev
+          change.body?._meta?._rev ?? change.body?._rev,
         );
 
         // ???: Find any children of change
@@ -511,13 +515,13 @@ export class ListWatch<Item = unknown> {
   }
 
   async #handleChangeFeed(
-    watch: AsyncIterable<ReadonlyArray<Readonly<Change>>>
+    watch: AsyncIterable<ReadonlyArray<Readonly<Change>>>,
   ): Promise<never> {
     // Iterate through list change feed
     for await (const [rootChange, ...children] of watch) {
       const listRev = Number(
         // @ts-expect-error just do it
-        rootChange!.body?._meta?._rev ?? rootChange!.body?._rev
+        rootChange!.body?._meta?._rev ?? rootChange!.body?._rev,
       );
       if (
         rootChange!.body === null &&
@@ -527,7 +531,7 @@ export class ListWatch<Item = unknown> {
         // The list itself was deleted
         log.warn(
           'Detected delete of list %s, nothing left to watch',
-          rootChange!.path
+          rootChange!.path,
         );
         break;
       }
@@ -537,7 +541,7 @@ export class ListWatch<Item = unknown> {
 
       if (this.#meta) {
         log.trace(
-          'Received change to root of list, updating handled rev in our _meta records'
+          'Received change to root of list, updating handled rev in our _meta records',
         );
         this.#meta.rev = (rootChange!.body as Resource)?._rev;
       }

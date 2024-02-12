@@ -114,6 +114,6 @@ test('should persist rev to _meta', async (t) => {
       path: `${path}/_meta/oada-list-lib/${name}`,
       data: { rev: 4 },
     } as PUTRequest),
-    `conn.put calls: ${inspect(conn.put.getCalls(), false, null, true)}`
+    `conn.put calls: ${inspect(conn.put.getCalls(), false, undefined, true)}`,
   );
 });

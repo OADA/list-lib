@@ -41,14 +41,8 @@
     "**/.pnp.*": true
   },
   "typescript.enablePromptUseWorkspaceTsdk": true,
-  "cSpell.words": [
-    "codeql",
-    "ksuid",
-    "lcov",
-    "snyk",
-    "sonarjs"
-  ],
-  "prettier.prettierPath": ".yarn/sdks/prettier/index.js",
+  "cSpell.words": ["codeql", "ksuid", "lcov", "snyk", "sonarjs", "xksuid"],
+  "prettier.prettierPath": ".yarn/sdks/prettier/index.cjs",
   "typescript.tsdk": ".yarn/sdks/typescript/lib",
   "eslint.nodePath": ".yarn/sdks",
   "explorerExclude.backup": null,

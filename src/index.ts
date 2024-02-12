@@ -46,7 +46,7 @@ export interface ItemChange<Item> extends ItemEvent<Item> {
 /**
  * Type of changes to detect in a list
  */
-export const enum ChangeType {
+export enum ChangeType {
   /**
    * Event for when an existing item is changed
    */
@@ -73,11 +73,6 @@ export interface EventTypes<Item> {
 
 export type ItemType<E extends ChangeType, Item> = EventTypes<Item>[E][0];
 
-export const enum AssumeState {
-  New,
-  Handled,
-}
-
-export { ListWatch } from './ListWatch.js';
+export { AssumeState, ListWatch } from './ListWatch.js';
 
 export type { Options } from './Options.js';
