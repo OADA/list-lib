@@ -49,8 +49,7 @@ test('should resume from last rev', async (t) => {
     },
   });
 
-  // eslint-disable-next-line no-new
-  new ListWatch({
+  const watch = new ListWatch({
     path,
     name,
     conn,
@@ -60,6 +59,8 @@ test('should resume from last rev', async (t) => {
   await setTimeout(5);
 
   t.is(conn.watch.firstCall?.args?.[0]?.rev, rev);
+
+  await watch.stop();
 });
 
 test('should persist rev to _meta', async (t) => {
@@ -116,4 +117,6 @@ test('should persist rev to _meta', async (t) => {
     } as PUTRequest),
     `conn.put calls: ${inspect(conn.put.getCalls(), false, undefined, true)}`,
   );
+
+  await watch.stop();
 });

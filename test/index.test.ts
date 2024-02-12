@@ -21,8 +21,8 @@ import test from 'ava';
 
 import { createStub, emptyResponse } from './conn-stub.js';
 
-import { ChangeType, ListWatch } from '@oada/list-lib';
-import type { Change } from '@oada/list-lib';
+// eslint-disable-next-line node/no-extraneous-import
+import { type Change, ChangeType, ListWatch } from '@oada/list-lib';
 
 const name = 'oada-list-lib-test';
 
@@ -32,13 +32,14 @@ test('it should WATCH given path', async (t) => {
   const conn = createStub();
   const path = '/bookmarks/foo/bar';
 
-  // eslint-disable-next-line no-new
-  new ListWatch({ path, name, conn });
+  const watch = new ListWatch({ path, name, conn });
   t.plan(1);
 
   await setTimeout(delay);
 
   t.is(conn.watch.firstCall?.args?.[0]?.path, path);
+
+  await watch.stop();
 });
 
 test.todo('it should reconnect WATCH');
@@ -103,6 +104,8 @@ test('it should detect new item', async (t) => {
   t.is(onItem.callCount, 1);
   t.is(onChangeItem.callCount, 0);
   t.is(onRemoveItem.callCount, 0);
+
+  await watch.stop();
 });
 
 test('it should detect removed item', async (t) => {
@@ -159,6 +162,8 @@ test('it should detect removed item', async (t) => {
   t.is(onItem.callCount, 0);
   t.is(onChangeItem.callCount, 0);
   t.is(onRemoveItem.callCount, 1);
+
+  await watch.stop();
 });
 
 test('it should detect modified item', async (t) => {
@@ -233,4 +238,6 @@ test('it should detect modified item', async (t) => {
   t.is(onItem.callCount, 1);
   t.is(onChangeItem.callCount, 1);
   t.is(onRemoveItem.callCount, 0);
+
+  await watch.stop();
 });

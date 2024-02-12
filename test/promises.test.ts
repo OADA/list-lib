@@ -75,6 +75,8 @@ test('it should detect new item', async (t) => {
 
   await t.notThrowsAsync(add);
   await t.notThrowsAsync(item);
+
+  await watch.stop();
 });
 
 test('it should detect removed item', async (t) => {
@@ -118,6 +120,8 @@ test('it should detect removed item', async (t) => {
   const removed = watch.once(ChangeType.ItemRemoved);
 
   await t.notThrowsAsync(removed);
+
+  await watch.stop();
 });
 
 test('it should detect modified item', async (t) => {
@@ -181,4 +185,6 @@ test('it should detect modified item', async (t) => {
 
   await t.notThrowsAsync(modified);
   await t.notThrowsAsync(item);
+
+  await watch.stop();
 });

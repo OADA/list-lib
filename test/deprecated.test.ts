@@ -79,8 +79,7 @@ test('it should detect new item', async (t) => {
     changes: changes(),
   });
 
-  // eslint-disable-next-line no-new
-  new ListWatch(options);
+  const watch = new ListWatch(options);
 
   await setTimeout(delay);
 
@@ -88,6 +87,8 @@ test('it should detect new item', async (t) => {
   t.is(options.onItem.callCount, 1);
   t.is(options.onChangeItem.callCount, 0);
   t.is(options.onRemoveItem.callCount, 0);
+
+  await watch.stop();
 });
 
 test('it should detect removed item', async (t) => {
@@ -133,8 +134,7 @@ test('it should detect removed item', async (t) => {
     changes: changes(),
   });
 
-  // eslint-disable-next-line no-new
-  new ListWatch(options);
+  const watch = new ListWatch(options);
 
   await setTimeout(delay);
 
@@ -142,6 +142,8 @@ test('it should detect removed item', async (t) => {
   t.is(options.onItem.callCount, 0);
   t.is(options.onChangeItem.callCount, 0);
   t.is(options.onRemoveItem.callCount, 1);
+
+  await watch.stop();
 });
 
 test('it should detect modified item', async (t) => {
@@ -205,8 +207,7 @@ test('it should detect modified item', async (t) => {
     changes: changes(),
   });
 
-  // eslint-disable-next-line no-new
-  new ListWatch(options);
+  const watch = new ListWatch(options);
 
   await setTimeout(delay);
 
@@ -214,4 +215,6 @@ test('it should detect modified item', async (t) => {
   t.is(options.onItem.callCount, 1);
   t.is(options.onChangeItem.callCount, 1);
   t.is(options.onRemoveItem.callCount, 0);
+
+  await watch.stop();
 });
