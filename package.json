@@ -63,7 +63,7 @@
   },
   "devDependencies": {
     "@ava/typescript": "^4.1.0",
-    "@oada/client": "^4.5.5",
+    "@oada/client": "^5.0.0",
     "@tsconfig/node16": "^16.1.1",
     "@types/debug": "^4.1.12",
     "@types/node": "^16.18.80",
