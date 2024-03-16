@@ -336,7 +336,7 @@ __metadata:
     typescript: "npm:5.3.3"
     xksuid: "https://github.com/g12i/xksuid.git#fix-crypto-polyfill"
   peerDependencies:
-    "@oada/client": ^4.5.5
+    "@oada/client": ^5.0.0
   peerDependenciesMeta:
     "@oada/client":
       optional: true

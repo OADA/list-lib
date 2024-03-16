@@ -1,6 +1,6 @@
 {
   "name": "@oada/list-lib",
-  "version": "5.0.0",
+  "version": "5.0.1",
   "description": "Library for processing items in an OADA list",
   "main": "dist/index.js",
   "type": "module",
@@ -118,7 +118,7 @@
     "xksuid": "https://github.com/g12i/xksuid.git#fix-crypto-polyfill"
   },
   "peerDependencies": {
-    "@oada/client": "^4.5.5"
+    "@oada/client": "^5.0.0"
   },
   "peerDependenciesMeta": {
     "@oada/client": {
