@@ -1,6 +1,6 @@
 {
   "name": "@oada/list-lib",
-  "version": "4.3.0",
+  "version": "5.0.0",
   "description": "Library for processing items in an OADA list",
   "main": "dist/index.js",
   "type": "module",
