@@ -91,8 +91,12 @@ export class ListWatch<Item = unknown> {
   readonly itemsPath;
   /**
    * The unique name of this service/watch
-   */
+  */
   readonly name;
+  /**
+   * The unique name of this service/watch
+  */
+  readonly timeout;
 
   readonly #conn;
   readonly #watch;
@@ -116,6 +120,7 @@ export class ListWatch<Item = unknown> {
     resume = true,
     conn,
     persistInterval = 1000,
+    timeout,
     // If no assert given, assume all items valid
     // eslint-disable-next-line @typescript-eslint/no-empty-function
     assertItem = () => {},
@@ -129,6 +134,7 @@ export class ListWatch<Item = unknown> {
     this.tree = tree;
     this.itemsPath = itemsPath;
     this.name = name;
+    this.timeout = timeout;
     this.#conn = conn;
     this.#assertItem = assertItem;
     this.#emitter = new EventEmitter<EventTypes<Item>, this>();
@@ -187,7 +193,7 @@ export class ListWatch<Item = unknown> {
           persistInterval,
         })
       : undefined;
-    this.#watch = this.#initialize(onNewList);
+    this.#watch = this.#initialize(onNewList, timeout);
   }
 
   /**
@@ -240,11 +246,12 @@ export class ListWatch<Item = unknown> {
   /**
    * Fetch the contents of the corresponding list item
    */
-  async #getItem(itemEvent: ItemEvent<Item>): Promise<Item> {
+  async #getItem(itemEvent: ItemEvent<Item>, timeout?: number): Promise<Item> {
     // Needed because TS is weird about asserts...
     const assertItem: TypeAssert<Item> = this.#assertItem;
     const { data: item } = await this.#conn.get({
       path: join(this.path, itemEvent.pointer),
+      timeout
     });
     assertItem(item);
     return item;
@@ -366,18 +373,18 @@ export class ListWatch<Item = unknown> {
   /**
    * Do async stuff for initializing ourself since constructors are synchronous
    */
-  async #initialize(assume: AssumeState = AssumeState.New) {
+  async #initialize(assume: AssumeState = AssumeState.New, timeout?: number) {
     const { path } = this;
     const conn = this.#conn;
 
     log.debug('Ensuring %s exists', path);
     try {
-      await conn.head({ path });
+      await conn.head({ path, timeout});
     } catch (error: unknown) {
       // @ts-expect-error darn errors
       if (error?.status === 403 || error?.status === 404) {
         // Create it
-        await conn.put({ path, data: {} });
+        await conn.put({ path, data: {}, timeout });
         log.trace('Created %s because it did not exist', path);
       } else {
         log.error({ error });
@@ -393,6 +400,7 @@ export class ListWatch<Item = unknown> {
       path,
       rev: this.#meta?.rev,
       type: 'tree',
+      timeout,
     });
 
     if (!foundMeta) {
@@ -402,7 +410,7 @@ export class ListWatch<Item = unknown> {
         }
 
         case AssumeState.New: {
-          await this.#handleStartingItems();
+          await this.#handleStartingItems(timeout);
           break;
         }
 
@@ -427,9 +435,9 @@ export class ListWatch<Item = unknown> {
    *
    * @todo Remove need for tree GET
    */
-  async #handleStartingItems() {
+  async #handleStartingItems(timeout?: number) {
     const { path, tree, itemsPath } = this;
-    const { data: json } = await this.#conn.get({ path, tree });
+    const { data: json } = await this.#conn.get({ path, tree, timeout });
     if (
       typeof json !== 'object' ||
       json === null ||
@@ -445,7 +453,7 @@ export class ListWatch<Item = unknown> {
       path: itemsPath,
       json,
     });
-    const listRev = Number(json._rev);
+    const listRev = Number((json as unknown as {_rev: number})._rev);
     for await (const { value, pointer } of items) {
       const itemChange = {
         item: value,

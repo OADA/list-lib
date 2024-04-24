@@ -93,6 +93,11 @@ export interface Options<Item> {
    * Called when the list in new to this lib (i.e., we have no _meta about it)
    */
   onNewList?: AssumeState;
+  /**
+   * Timeout for the watches created in OADAClient 
+   */
+  timeout?: number;
+
 }
 
 /**
