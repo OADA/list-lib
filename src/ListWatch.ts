@@ -382,7 +382,7 @@ export class ListWatch<Item = unknown> {
       await conn.head({ path, timeout});
     } catch (error: unknown) {
       // @ts-expect-error darn errors
-      if (error?.status === 403 || error?.status === 404) {
+      if (error?.status === 403 || error?.status === 404 || error?.code === 403 || error?.code === 404) {
         // Create it
         await conn.put({ path, data: {}, timeout });
         log.trace('Created %s because it did not exist', path);
