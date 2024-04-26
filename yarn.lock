@@ -245,9 +245,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@oada/client@npm:^5.0.0":
-  version: 5.0.0
-  resolution: "@oada/client@npm:5.0.0"
+"@oada/client@npm:^5.0.1":
+  version: 5.0.1
+  resolution: "@oada/client@npm:5.0.1"
   dependencies:
     "@oada/types": "npm:^3.5.3"
     debug: "npm:^4.3.4"
@@ -258,7 +258,7 @@ __metadata:
     isomorphic-timers-promises: "npm:^1.0.1"
     isomorphic-ws: "npm:^5.0.0"
     json-ptr: "npm:^3.1.1"
-    jsonpath-plus: "npm:^8.0.0"
+    jsonpath-plus: "npm:^8.1.0"
     media-type: "npm:^0.3.1"
     object-assign-deep: "npm:^0.4.0"
     p-queue: "npm:^8.0.1"
@@ -267,7 +267,7 @@ __metadata:
     resolve-alpn: "npm:^1.2.1"
     serialize-error: "npm:^11.0.3"
     tslib: "npm:^2.6.2"
-    undici: "npm:^6.6.2"
+    undici: "npm:^6.14.1"
     ws: "npm:^8.16.0"
     xksuid: "https://github.com/aultac/xksuid.git#commit=22a21eb01331191feb62ea0a4e67d96d2e80f396"
   peerDependencies:
@@ -275,7 +275,7 @@ __metadata:
   peerDependenciesMeta:
     "@oada/jobs":
       optional: true
-  checksum: 10/3e9722ee36b20582053f79612aeaf9f314a828a3e8a7d1fc0db7e508ff836a09ad081703d576def1a31d7639402da7ac6edc6470e1a2c6a9edb59d6bb2232a00
+  checksum: 10/be445532a348ff81ba6af88840ba23399b4228bd6176f2e75d2bda163c23de0be68469c08d21aa55d288a27a2a76034813a3c9c9d2105936a0056ff9a7b92b3b
   languageName: node
   linkType: hard
 
@@ -284,7 +284,7 @@ __metadata:
   resolution: "@oada/list-lib@workspace:."
   dependencies:
     "@ava/typescript": "npm:^4.1.0"
-    "@oada/client": "npm:^5.0.0"
+    "@oada/client": "npm:^5.0.1"
     "@oada/types": "npm:^3.5.3"
     "@tsconfig/node16": "npm:^16.1.1"
     "@types/debug": "npm:^4.1.12"
@@ -3874,6 +3874,16 @@ __metadata:
   languageName: node
   linkType: hard
 
+"jsonpath-plus@npm:^8.1.0":
+  version: 8.1.0
+  resolution: "jsonpath-plus@npm:8.1.0"
+  bin:
+    jsonpath: bin/jsonpath-cli.js
+    jsonpath-plus: bin/jsonpath-cli.js
+  checksum: 10/1954bbf0f9b2b8b749d0ed22cb84e0f475efe66c6cd186cbe0f97c1c8350ac68d156053ac690629cf9ad8ff00aa0fc8e2e97100a5cdd5ee7610074f5f7151650
+  languageName: node
+  linkType: hard
+
 "jsx-ast-utils@npm:^3.3.2, jsx-ast-utils@npm:^3.3.5":
   version: 3.3.5
   resolution: "jsx-ast-utils@npm:3.3.5"
@@ -5825,10 +5835,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"undici@npm:^6.6.2":
-  version: 6.9.0
-  resolution: "undici@npm:6.9.0"
-  checksum: 10/ee227517586f96b73db3b7a24387f101d191df6a6395ec0199688d6e56195dbe8c9d3456be2fa4a70af30fb1a9a905142826f9bf89c328dec842f00b55e9e5c2
+"undici@npm:^6.14.1":
+  version: 6.14.1
+  resolution: "undici@npm:6.14.1"
+  checksum: 10/cb39b097b5093a3fdeb74bf86375d8164e49a5753fcee70d2240e74e257a1c79dcbb08b971785b70a5d665a630b4dbc9f8c460cbe3a8a833c085895feb9bdaa7
   languageName: node
   linkType: hard
 

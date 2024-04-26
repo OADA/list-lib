@@ -1,6 +1,6 @@
 {
   "name": "@oada/list-lib",
-  "version": "5.0.3",
+  "version": "5.0.4",
   "description": "Library for processing items in an OADA list",
   "main": "dist/index.js",
   "type": "module",
@@ -17,6 +17,9 @@
     "url": "https://github.com/OADA/list-lib/issues"
   },
   "homepage": "https://github.com/OADA/list-lib",
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "test": "yarn run build test && c8 ava",
     "test:debug": "ava -T 60m -svc 1 --no-worker-threads",
@@ -63,7 +66,7 @@
   },
   "devDependencies": {
     "@ava/typescript": "^4.1.0",
-    "@oada/client": "^5.0.0",
+    "@oada/client": "^5.0.1",
     "@tsconfig/node16": "^16.1.1",
     "@types/debug": "^4.1.12",
     "@types/node": "^16.18.80",
