@@ -118,7 +118,7 @@
     "jsonpath-plus": "^8.0.0",
     "object-assign-deep": "^0.4.0",
     "tslib": "^2.6.2",
-    "xksuid": "https://github.com/g12i/xksuid.git#fix-crypto-polyfill"
+    "xksuid": "0.0.4"
   },
   "peerDependencies": {
     "@oada/client": "^5.0.0"
