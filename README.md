@@ -16,12 +16,19 @@ For detailed options, see the `Options` type in src/Options.ts
 ## Basic Usage Example
 
 ```typescript
-import { ChangeType, ListWatch } from '@oada/list-lib'
+import { ChangeType, ListWatch, AssumeState } from '@oada/list-lib'
 
 // See type definitions for all supported options
 const watch = new ListWatch({
     path: '/bookmarks/foo/list',
+    assertItem: /* assertion function to run on each item handled */,
     conn: /* an @oada/client instance */,
+    name: /* string; key name of the oada-list-lib entry in the _meta doc*/,
+    resume: /* boolean; whether to track changes using a _meta/oada-list-lib/<name> entry */
+    onNewList: /* AssumeState.New || AssumeState.Handled; Whether or not to handle existing
+                  list items on startup. `New` means it will treat the list as new every time 
+                  it starts up and will attempt to process each item; `Handled` means it will
+                  not process existing items. */,
 })
 
 // Uses async generators
