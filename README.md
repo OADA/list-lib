@@ -24,7 +24,7 @@ const watch = new ListWatch({
     assertItem: /* assertion function to run on each item handled */,
     conn: /* an @oada/client instance */,
     name: /* string; key name of the oada-list-lib entry in the _meta doc*/,
-    resume: /* boolean; whether to track changes using a _meta/oada-list-lib/<name> entry */
+    resume: /* boolean; whether to track changes using a _meta/oada-list-lib/<name> entry */,
     onNewList: /* AssumeState.New || AssumeState.Handled; Whether or not to handle existing
                   list items on startup. `New` means it will treat the list as new every time 
                   it starts up and will attempt to process each item; `Handled` means it will
