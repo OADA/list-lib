@@ -1,13 +1,20 @@
-# Ignore compiled TS output
 dist
-
+bundle.*
 .test
 coverage
+node_modules
+yarn-cache
+services-available
 
-yarn.lock
+LICENSE
+
 tags*
 .history
-.vim
+.dccache
 
-.yarn
-.pnp.*
+**/yarn.lock
+**/yarn-error.log
+**/.yarn/*
+**/.pnp.*
+
+act

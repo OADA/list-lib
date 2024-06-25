@@ -25,8 +25,8 @@ import debug from 'debug';
 import type { Json } from '@oada/client';
 import { assert as assertResource } from '@oada/types/oada/resource.js';
 
+import { errorCode, join } from './util.js';
 import type { Conn } from './Options.js';
-import { join } from './util.js';
 
 const log = {
   trace: debug('@oada/list-lib#metadata:trace'),
@@ -159,36 +159,48 @@ export class Metadata {
       assertResource(data);
       this.#rev = Number(data.rev ?? 0);
       return true;
-    } catch {
-      // Create our metadata?
-      log.info('%s does not exist, posting new resource', this.#path);
-      const {
-        headers: { 'content-location': location },
-      } = await this.#conn.post({
-        path: '/resources/',
-        data: {},
-        contentType: 'application/json',
-      });
-      const {
-        headers: { 'x-oada-rev': revHeader },
-      } = await this.#conn.put({
-        path: this.#path,
-        data: { _id: location?.slice(1) },
-      });
+    } catch (error: unknown) {
+      if (errorCode(error as Error) !== '404') {
+        // Pass other errors causes up
+        throw new Error('List init error', { cause: error });
+      }
 
-      const rev = revHeader ? Number(revHeader) : undefined;
-
-      this.#rev = rev;
-      await this.#conn.put({
-        path: this.#path,
-        data: {
-          rev: rev!,
-        },
-      });
-      return false;
+      return await this.#createMeta();
     } finally {
       this.#initialized = true;
     }
+  }
+
+  /**
+   * Create our metadata
+   */
+  async #createMeta() {
+    log.info('%s does not exist, posting new resource', this.#path);
+
+    const {
+      headers: { 'content-location': location },
+    } = await this.#conn.post({
+      path: '/resources/',
+      data: {},
+      contentType: 'application/json',
+    });
+    const {
+      headers: { 'x-oada-rev': revHeader },
+    } = await this.#conn.put({
+      path: this.#path,
+      data: { _id: location?.slice(1) },
+    });
+
+    const rev = revHeader ? Number(revHeader) : undefined;
+
+    this.#rev = rev;
+    await this.#conn.put({
+      path: this.#path,
+      data: {
+        rev: rev!,
+      },
+    });
+    return false;
   }
 
   async #doUpdate() {

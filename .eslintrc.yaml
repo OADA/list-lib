@@ -1,7 +1,7 @@
 root: true
 
 extends:
-  - 'plugin:@typescript-eslint/recommended'
+  - plugin:@typescript-eslint/recommended
   - plugin:node/recommended
   - plugin:github/recommended
   - plugin:promise/recommended
@@ -11,10 +11,10 @@ extends:
   - plugin:import/recommended
   - plugin:unicorn/recommended
   #- plugin:security/recommended
-  - plugin:sonarjs/recommended
+  #- plugin:sonarjs/recommended
   - plugin:ava/recommended
   - xo
-  - prettier
+  - plugin:prettier/recommended
 
 plugins:
   - '@typescript-eslint'
@@ -37,24 +37,24 @@ parser: '@typescript-eslint/parser'
 
 parserOptions:
   ecmaVersion: 2020
-  project: './tsconfig.*'
+  project: ./tsconfig*.json
 
 overrides:
-  - files: '*.{c,m,}ts'
+  - files: '*.ts'
     extends:
       - plugin:github/typescript
       - plugin:import/typescript
       - xo-typescript
-      - prettier
+      - plugin:prettier/recommended
     parserOptions:
       ecmaVersion: 2020
-      project: './tsconfig.*'
+      project: ./tsconfig*.json
     rules:
+      prettier/prettier: off
       '@typescript-eslint/naming-convention':
         [
           error,
           { selector: default, format: [camelCase] },
-          { selector: default, modifiers: [static], format: [PascalCase] },
           { selector: import, modifiers: [default], format: null },
           { selector: objectLiteralProperty, format: null },
           { selector: enumMember, format: [PascalCase] },
@@ -80,10 +80,9 @@ overrides:
           },
 
           { selector: typeLike, format: [PascalCase] },
-
           { selector: parameter, modifiers: [destructured], format: null },
         ]
-      '@typescript-eslint/restrict-template-expressions': off
+      '@typescript-eslint/restrict-template-expressions': 0
       '@typescript-eslint/no-shadow': warn
       '@typescript-eslint/no-unused-vars':
         [
@@ -91,20 +90,20 @@ overrides:
           {
             args: after-used,
             ignoreRestSiblings: true,
-            varsIgnorePattern: '^_',
-            argsIgnorePattern: '^_',
+            varsIgnorePattern: ^_,
+            argsIgnorePattern: ^_,
           },
         ]
       '@typescript-eslint/consistent-type-definitions': [warn, interface]
-      '@typescript-eslint/switch-exhaustiveness-check': off
 
 rules:
+  prettier/prettier: off
   notice/notice:
     - error
     - template: |
         /**
          * @license
-         * Copyright <%= YEAR %> Open Ag Data Alliance
+         * Copyright <%= YEAR %> Qlever LLC
          *
          * Licensed under the Apache License, Version 2.0 (the "License");
          * you may not use this file except in compliance with the License.
@@ -120,6 +119,7 @@ rules:
          */
       onNonMatchingHeader: append
       nonMatchingTolerance: 0.7
+  '@typescript-eslint/no-shadow': [warn, { allow: [_] }]
   sonarjs/no-duplicate-string: [warn, { threshold: 5 }]
   sonarjs/cognitive-complexity: warn
   eslint-comments/no-unused-disable: off
@@ -132,6 +132,7 @@ rules:
   eslint-comments/no-use: off
   no-secrets/no-secrets: [error, { tolerance: 5 }]
   no-empty-label: off
+  no-return-await: 0
   no-warning-comments: 0
   node/no-missing-import: off
   import/no-unresolved: off
@@ -144,6 +145,7 @@ rules:
         res: false
         err: false
         doc: false
+        docs: false
   no-constructor-bind/no-constructor-bind: error
   no-constructor-bind/no-constructor-state: error
   sort-imports: [warn, { allowSeparatedGroups: true }]
@@ -151,4 +153,4 @@ rules:
   ava/no-import-test-files: off
   ava/no-skip-test: warn
   ava/no-skip-assert: warn
-  '@typescript-eslint/switch-exhaustiveness-check': off
+  ava/use-test: off

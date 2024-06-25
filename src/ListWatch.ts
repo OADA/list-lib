@@ -31,6 +31,7 @@ import {
   assertNever,
   buildChangeObject,
   changeSym,
+  errorCode,
   join,
 } from './util.js';
 import {
@@ -70,11 +71,13 @@ export class ListWatch<Item = unknown> {
    * Make ListWatch consider every unknown `Item` new
    * @deprecated
    */
+  // eslint-disable-next-line @typescript-eslint/naming-convention
   static readonly AssumeNew = AssumeState.New;
   /**
    * Make ListWatch consider every unknown `Item` handled
    * @deprecated
    */
+  // eslint-disable-next-line @typescript-eslint/naming-convention
   static readonly AssumeHandled = AssumeState.Handled;
 
   /**
@@ -91,11 +94,11 @@ export class ListWatch<Item = unknown> {
   readonly itemsPath;
   /**
    * The unique name of this service/watch
-  */
+   */
   readonly name;
   /**
    * The unique name of this service/watch
-  */
+   */
   readonly timeout;
 
   readonly #conn;
@@ -251,7 +254,7 @@ export class ListWatch<Item = unknown> {
     const assertItem: TypeAssert<Item> = this.#assertItem;
     const { data: item } = await this.#conn.get({
       path: join(this.path, itemEvent.pointer),
-      timeout
+      timeout,
     });
     assertItem(item);
     return item;
@@ -307,6 +310,7 @@ export class ListWatch<Item = unknown> {
         throw new TypeError('ItemAny is not a valid event');
       }
 
+      // eslint-disable-next-line @typescript-eslint/switch-exhaustiveness-check
       default: {
         assertNever(event, `Unknown event type ${event}`);
       }
@@ -379,10 +383,9 @@ export class ListWatch<Item = unknown> {
 
     log.debug('Ensuring %s exists', path);
     try {
-      await conn.head({ path, timeout});
+      await conn.head({ path, timeout });
     } catch (error: unknown) {
-      // @ts-expect-error darn errors
-      if (error?.status === 403 || error?.status === 404 || error?.code === '403' || error?.code === '404') {
+      if (['403', '404'].includes(errorCode(error as Error) ?? '')) {
         // Create it
         await conn.put({ path, data: {}, timeout });
         log.trace('Created %s because it did not exist', path);
@@ -414,6 +417,7 @@ export class ListWatch<Item = unknown> {
           break;
         }
 
+        // eslint-disable-next-line @typescript-eslint/switch-exhaustiveness-check
         default: {
           assertNever(assume);
         }
@@ -454,7 +458,7 @@ export class ListWatch<Item = unknown> {
       path: itemsPath,
       json,
     });
-    const listRev = Number((json as unknown as {_rev: number})._rev);
+    const listRev = Number((json as unknown as { _rev: number })._rev);
     for await (const { value, pointer } of items) {
       const itemChange = {
         item: value,
