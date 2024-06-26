@@ -430,8 +430,7 @@ export class ListWatch<Item = unknown> {
       this.#emitter.emit('error', error),
     );
 
-    log.info(`ListWatch initialized on path: ${this.path}`);
-    log.trace({ this: this }, 'ListWatch ');
+    log.debug({ this: this }, 'ListWatch initialized');
     return changes;
   }
 

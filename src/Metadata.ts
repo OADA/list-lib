@@ -175,7 +175,7 @@ export class Metadata {
    * Create our metadata
    */
   async #createMeta() {
-    log.info('%s does not exist, posting new resource', this.#path);
+    log.warn('%s does not exist, posting new resource', this.#path);
 
     const {
       headers: { 'content-location': location },
