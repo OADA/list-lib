@@ -113,7 +113,7 @@
     "json-ptr": "^3.1.1",
     "jsonpath-plus": "^9.0.0",
     "object-assign-deep": "^0.4.0",
-    "tslib": "^2.6.3",
+    "tslib": "^2.7.0",
     "xksuid": "https://github.com/g12i/xksuid.git#commit=22a21eb01331191feb62ea0a4e67d96d2e80f396"
   },
   "peerDependencies": {
