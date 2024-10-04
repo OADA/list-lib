@@ -96,13 +96,16 @@ export interface Options<Item> {
    */
   onNewList?: AssumeState;
   /**
-   * Timeout for the watches created in OADAClient 
+   * Timeout for the watches created in OADAClient
    */
   timeout?: number;
+<<<<<<< HEAD
   /**
    * Provide a Logger from your service
    */
   log?: Logger;
+=======
+>>>>>>> 1b1d931922cf0eb4103e529deddb203a5efe2442
 }
 
 /**

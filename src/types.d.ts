@@ -17,3 +17,7 @@
 declare module 'isomorphic-timers-promises' {
   export * from 'node:timers/promises';
 }
+
+interface Error {
+  code?: string;
+}

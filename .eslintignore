@@ -1,4 +1,6 @@
 dist
-lib
-coverage
+bundle.*
 .test
+coverage
+.pnp.*
+.yarn

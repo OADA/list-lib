@@ -116,6 +116,15 @@ export function buildChangeObject(rootChange: Change, ...children: Change[]) {
   return changeBody;
 }
 
+export function errorCode(error: {
+  code?: string;
+  status?: number;
+  statusCode?: number;
+}): string | undefined {
+  const code = error.code ?? error.status ?? error.statusCode;
+  return code?.toString();
+}
+
 /**
  * @internal
  */
