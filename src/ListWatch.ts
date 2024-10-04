@@ -17,10 +17,10 @@
 
 import type { EventEmitter as NodeEventEmitter } from 'node:events';
 import { on } from 'node:events';
+import { pino } from '@oada/pino-debug';
 
 import { EventEmitter } from 'eventemitter3';
 import { JSONPath } from 'jsonpath-plus';
-import debug from 'debug';
 
 import type { Change } from '@oada/client';
 import type Resource from '@oada/types/oada/resource.js';
@@ -42,15 +42,6 @@ import {
 } from './index.js';
 import type { Options, OptionsDeprecated } from './Options.js';
 import { Metadata } from './Metadata.js';
-
-const log = {
-  trace: debug('@oada/list-lib:trace'),
-  debug: debug('@oada/list-lib:debug'),
-  info: debug('@oada/list-lib:info'),
-  warn: debug('@oada/list-lib:warn'),
-  error: debug('@oada/list-lib:error'),
-  fatal: debug('@oada/list-lib:fatal'),
-};
 
 export enum AssumeState {
   New,
@@ -103,6 +94,7 @@ export class ListWatch<Item = unknown> {
   readonly #meta;
   readonly #emitter;
   readonly #assertItem;
+  readonly #log;
 
   constructor(options: Options<Item>);
   /**
@@ -129,6 +121,7 @@ export class ListWatch<Item = unknown> {
     onItem,
     onRemoveItem,
     onNewList,
+    log,
   }: Options<Item> & OptionsDeprecated<Item>) {
     this.path = path;
     this.tree = tree;
@@ -139,8 +132,11 @@ export class ListWatch<Item = unknown> {
     this.#assertItem = assertItem;
     this.#emitter = new EventEmitter<EventTypes<Item>, this>();
 
+    this.#log = log 
+      ? log.child({ lib: 'list-lib', 'list-lib-name': this.name})
+      : pino({base: { lib: 'list-lib', 'list-lib-name': this.name }})
     if (onAddItem) {
-      log.warn('onAddItem is deprecated, use .on(ChangeType.ItemAdded, ...)');
+      this.#log.warn('onAddItem is deprecated, use .on(ChangeType.ItemAdded, ...)');
       this.#emitter.on(
         ChangeType.ItemAdded,
         this.#wrapListener(ChangeType.ItemAdded, async ({ item, pointer }) =>
@@ -150,7 +146,7 @@ export class ListWatch<Item = unknown> {
     }
 
     if (onChangeItem) {
-      log.warn(
+      this.#log.warn(
         'onChangeItem is deprecated, use .on(ChangeType.ItemChanged, ...)',
       );
       this.#emitter.on(
@@ -163,7 +159,7 @@ export class ListWatch<Item = unknown> {
     }
 
     if (onItem) {
-      log.warn('onItem is deprecated, use .on(ChangeType.ItemAny, ...)');
+      this.#log.warn('onItem is deprecated, use .on(ChangeType.ItemAny, ...)');
       this.#emitter.on(
         ChangeType.ItemAny,
         this.#wrapListener(ChangeType.ItemAny, async ({ item, pointer }) =>
@@ -173,7 +169,7 @@ export class ListWatch<Item = unknown> {
     }
 
     if (onRemoveItem) {
-      log.warn(
+      this.#log.warn(
         'onRemoveItem is deprecated, use .on(ChangeType.ItemRemoved, ...)',
       );
       this.#emitter.on(
@@ -190,6 +186,7 @@ export class ListWatch<Item = unknown> {
           conn: this.#conn,
           path,
           name,
+          log: this.#log,
           persistInterval,
         })
       : undefined;
@@ -279,7 +276,7 @@ export class ListWatch<Item = unknown> {
     };
     switch (event) {
       case ChangeType.ItemChanged: {
-        log.debug({ itemChange: itemEvent }, 'Detected change to item');
+        this.#log.debug({ itemChange: itemEvent }, 'Detected change to item');
         this.#emitter.emit(
           ChangeType.ItemChanged,
           out as ItemType<ChangeType.ItemChanged, Item>,
@@ -290,7 +287,7 @@ export class ListWatch<Item = unknown> {
       }
 
       case ChangeType.ItemAdded: {
-        log.debug({ itemChange: itemEvent }, 'Detected new item');
+        this.#log.debug({ itemChange: itemEvent }, 'Detected new item');
         this.#emitter.emit(ChangeType.ItemAdded, out);
         this.#emitter.emit(ChangeType.ItemAny, out);
 
@@ -298,7 +295,7 @@ export class ListWatch<Item = unknown> {
       }
 
       case ChangeType.ItemRemoved: {
-        log.debug({ itemChange: itemEvent }, 'Detected removed item');
+        this.#log.debug({ itemChange: itemEvent }, 'Detected removed item');
         this.#emitter.emit(ChangeType.ItemRemoved, out);
         break;
       }
@@ -331,7 +328,7 @@ export class ListWatch<Item = unknown> {
       try {
         await listener(itemChange);
       } catch (error: unknown) {
-        log.error(
+        this.#log.error(
           { type, listener: listener.name, error },
           'Error in listener',
         );
@@ -359,7 +356,7 @@ export class ListWatch<Item = unknown> {
         // Generate event
         yield [event];
       } catch (error: unknown) {
-        log.error({ type, error }, 'Error in generator');
+        this.#log.error({ type, error }, 'Error in generator');
         await this.#meta?.setErrored(event.pointer, event.listRev, error);
       } finally {
         if (this.#meta) {
@@ -377,7 +374,7 @@ export class ListWatch<Item = unknown> {
     const { path } = this;
     const conn = this.#conn;
 
-    log.debug('Ensuring %s exists', path);
+    this.#log.debug('Ensuring %s exists', path);
     try {
       await conn.head({ path, timeout});
     } catch (error: unknown) {
@@ -385,15 +382,15 @@ export class ListWatch<Item = unknown> {
       if (error?.status === 403 || error?.status === 404 || error?.code === '403' || error?.code === '404') {
         // Create it
         await conn.put({ path, data: {}, timeout });
-        log.trace('Created %s because it did not exist', path);
+        this.#log.trace('Created %s because it did not exist', path);
       } else {
-        log.error({ error });
+        this.#log.error({ error });
         throw error;
       }
     }
 
     const foundMeta = await this.#meta?.init();
-    log.debug('Resuming watch from rev %s', this.#meta?.rev);
+    this.#log.debug('Resuming watch from rev %s', this.#meta?.rev);
 
     // Setup watch on the path
     const { changes } = await conn.watch({
@@ -426,8 +423,8 @@ export class ListWatch<Item = unknown> {
       this.#emitter.emit('error', error),
     );
 
-    log.info(`ListWatch initialized on path: ${this.path}`);
-    log.trace({ this: this }, 'ListWatch ');
+    this.#log.info(`ListWatch initialized on path: ${this.path}`);
+    this.#log.trace({ this: this }, 'ListWatch ');
     return changes;
   }
 
@@ -498,7 +495,7 @@ export class ListWatch<Item = unknown> {
       }
 
       for await (const change of changes ?? []) {
-        log.trace({ change }, 'Received change');
+        this.#log.trace({ change }, 'Received change');
         const rev = Number(
           // @ts-expect-error just do it
           change.body?._meta?._rev ?? change.body?._rev,
@@ -538,7 +535,7 @@ export class ListWatch<Item = unknown> {
         rootChange!.path === ''
       ) {
         // The list itself was deleted
-        log.warn(
+        this.#log.warn(
           'Detected delete of list %s, nothing left to watch',
           rootChange!.path,
         );
@@ -549,14 +546,14 @@ export class ListWatch<Item = unknown> {
       await this.#handleItemChanges(changeBody, listRev);
 
       if (this.#meta) {
-        log.trace(
+        this.#log.trace(
           'Received change to root of list, updating handled rev in our _meta records',
         );
         this.#meta.rev = (rootChange!.body as Resource)?._rev;
       }
     }
 
-    log.fatal('Change feed ended unexpectedly');
+    this.#log.fatal('Change feed ended unexpectedly');
     throw new Error('Change feed ended');
   }
 }

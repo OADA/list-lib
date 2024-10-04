@@ -17,6 +17,8 @@
 
 import type { OADAClient } from '@oada/client';
 import type Tree from '@oada/types/oada/tree/v1.js';
+import { type Logger } from '@oada/pino-debug';
+
 
 import type {
   AssumeState,
@@ -97,7 +99,10 @@ export interface Options<Item> {
    * Timeout for the watches created in OADAClient 
    */
   timeout?: number;
-
+  /**
+   * Provide a Logger from your service
+   */
+  log?: Logger;
 }
 
 /**

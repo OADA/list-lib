@@ -15,27 +15,14 @@
  * limitations under the License.
  */
 
-import { inspect } from 'node:util';
-
 import { AbortController } from 'abort-controller';
-import { setInterval } from 'isomorphic-timers-promises';
-
-import debug from 'debug';
-
-import type { Json } from '@oada/client';
 import { assert as assertResource } from '@oada/types/oada/resource.js';
-
 import type { Conn } from './Options.js';
+import { inspect } from 'node:util';
 import { join } from './util.js';
-
-const log = {
-  trace: debug('@oada/list-lib#metadata:trace'),
-  debug: debug('@oada/list-lib#metadata:debug'),
-  info: debug('@oada/list-lib#metadata:info'),
-  warn: debug('@oada/list-lib#metadata:warn'),
-  error: debug('@oada/list-lib#metadata:error'),
-  fatal: debug('@oada/list-lib#metadata:fatal'),
-};
+import type { Json } from '@oada/client';
+import { type Logger } from '@oada/pino-debug';
+import { setInterval } from 'isomorphic-timers-promises';
 
 /**
  * Record of a successfully handled list item
@@ -89,11 +76,13 @@ export class Metadata {
   #initialized = false;
   readonly #controller;
   readonly #updates;
+  readonly #log;
 
   constructor({
     conn,
     path,
     name,
+    log,
     persistInterval,
   }: {
     /**
@@ -102,11 +91,13 @@ export class Metadata {
     path: string;
     name: string;
     conn: Conn;
+    log: Logger;
     persistInterval: number;
   }) {
     this.#conn = conn;
     this.#path = join(path, '_meta', Metadata.META_KEY, name);
     this.#controller = new AbortController();
+    this.#log = log;
 
     // ??? Use timeouts for all updates?
     const revUpdateInterval = setInterval(persistInterval, undefined, {
@@ -161,7 +152,7 @@ export class Metadata {
       return true;
     } catch {
       // Create our metadata?
-      log.info('%s does not exist, posting new resource', this.#path);
+      this.#log.info('%s does not exist, posting new resource', this.#path);
       const {
         headers: { 'content-location': location },
       } = await this.#conn.post({
@@ -196,7 +187,7 @@ export class Metadata {
       return;
     }
 
-    log.trace('Recording rev %s', this.#rev);
+    this.#log.trace('Recording rev %s', this.#rev);
     const data: Json = { rev: this.#rev };
     this.#revDirty = false;
     try {
@@ -205,7 +196,7 @@ export class Metadata {
         data,
       });
     } catch (error: unknown) {
-      log.error({ error }, 'Failed to update rev');
+      this.#log.error({ error }, 'Failed to update rev');
       this.#revDirty = true;
     }
   }
@@ -220,7 +211,7 @@ export class Metadata {
       return;
     }
 
-    log.trace('Updating local rev to %d', rev);
+    this.#log.trace('Updating local rev to %d', rev);
     this.#rev = rev;
     this.#revDirty = true;
   }
